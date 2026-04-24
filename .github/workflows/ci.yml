@@ -1,0 +1,211 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+
+env:
+  BUN_VERSION: "1.3.12"
+
+jobs:
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache Bun + node_modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+            apps/*/node_modules
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/package.json') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install deps
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck backend
+        run: bun run --cwd apps/backend typecheck
+
+      - name: Typecheck workers
+        run: bun run --cwd apps/workers typecheck
+
+      - name: Typecheck frontend
+        run: bun run --cwd apps/frontend typecheck
+
+  backend-test:
+    name: backend-test
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      dragonfly:
+        image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+        ports:
+          - 6379:6379
+        options: >-
+          --ulimit memlock=-1
+    env:
+      NODE_ENV: test
+      MONGO_URI: mongodb://localhost:27017
+      MONGO_DB: devthriller_test
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: ci-access-secret-0123456789abcdef
+      JWT_REFRESH_SECRET: ci-refresh-secret-0123456789abcdef
+      R2_ACCOUNT_ID: ci
+      R2_ACCESS_KEY_ID: ci
+      R2_SECRET_ACCESS_KEY: ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache Bun + node_modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+            apps/*/node_modules
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/package.json') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install deps
+        run: bun install --frozen-lockfile
+
+      - name: Wait for Mongo
+        run: |
+          for i in {1..30}; do
+            if nc -z localhost 27017; then echo "mongo up"; exit 0; fi
+            sleep 1
+          done
+          echo "mongo not reachable" >&2; exit 1
+
+      - name: Run backend tests
+        working-directory: apps/backend
+        run: bun test
+
+  e2e:
+    # Marked continue-on-error — the smoke specs drive UI selectors
+    # (data-testid) that the frontend still needs to add, so they will
+    # red until that wiring lands. Once the frontend exposes the testids,
+    # remove `continue-on-error` below.
+    name: e2e (continue-on-error until UI testids land)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+      dragonfly:
+        image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+        ports:
+          - 6379:6379
+        options: >-
+          --ulimit memlock=-1
+    env:
+      NODE_ENV: development
+      MONGO_URI: mongodb://localhost:27017
+      MONGO_DB: devthriller_e2e
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: ci-access-secret-0123456789abcdef
+      JWT_REFRESH_SECRET: ci-refresh-secret-0123456789abcdef
+      R2_ACCOUNT_ID: ci
+      R2_ACCESS_KEY_ID: ci
+      R2_SECRET_ACCESS_KEY: ci
+      FRONTEND_ORIGIN: http://localhost:5173
+      E2E_BASE_URL: http://localhost:5173
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache Bun + node_modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+            apps/*/node_modules
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/package.json') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install deps
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: bun x playwright install --with-deps chromium firefox
+        working-directory: apps/frontend
+
+      - name: Seed E2E data
+        working-directory: apps/backend
+        run: bun run seed:e2e
+
+      - name: Start backend
+        working-directory: apps/backend
+        run: bun run start &
+        env:
+          PORT: 3001
+
+      - name: Start frontend
+        working-directory: apps/frontend
+        run: bun run dev &
+
+      - name: Wait for frontend
+        run: |
+          for i in {1..60}; do
+            if curl -sSf http://localhost:5173 >/dev/null; then echo "frontend up"; exit 0; fi
+            sleep 2
+          done
+          echo "frontend never came up" >&2; exit 1
+
+      - name: Run Playwright
+        working-directory: apps/frontend
+        run: bun x playwright test
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/frontend/playwright-report
+          retention-days: 7
+
+  lint:
+    # No eslint config is present in the repo yet. This job intentionally no-ops
+    # so the matrix remains visible; wire `bun run lint` once eslint is added.
+    name: lint (skipped - no eslint config)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No-op
+        run: echo "lint skipped: no eslint config found in the repository"

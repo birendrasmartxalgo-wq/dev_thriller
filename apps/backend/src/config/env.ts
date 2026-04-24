@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+// In test mode, inject safe defaults so tests can boot without a full .env.
+if (process.env.NODE_ENV === "test") {
+  process.env.MONGO_URI ??= "mongodb://localhost:27017";
+  process.env.MONGO_DB ??= "devthriller_test";
+  process.env.JWT_ACCESS_SECRET ??= "test-access-secret-0123456789abcdef";
+  process.env.JWT_REFRESH_SECRET ??= "test-refresh-secret-0123456789abcdef";
+}
+
 const schema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().int().default(3001),

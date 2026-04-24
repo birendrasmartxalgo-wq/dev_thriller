@@ -21,13 +21,7 @@ import { adminRoutes } from "@/modules/admin/routes";
 import { notificationRoutes } from "@/modules/notifications/routes";
 import { wsRoutes } from "@/ws/routes";
 
-async function bootstrap() {
-  await connectMongo();
-  await ensureIndexes();
-  await connectDragonfly();
-  subscribeAclInvalidation();
-  await startPubSub();
-
+export function buildApp() {
   const app = new Elysia()
     .use(
       cors({
@@ -59,17 +53,31 @@ async function bootstrap() {
     .use(searchRoutes)
     .use(adminRoutes)
     .use(notificationRoutes)
-    .use(wsRoutes)
-    .listen(env.PORT);
+    .use(wsRoutes);
+
+  return app;
+}
+
+export async function bootstrap() {
+  await connectMongo();
+  await ensureIndexes();
+  await connectDragonfly();
+  subscribeAclInvalidation();
+  await startPubSub();
+
+  const app = buildApp().listen(env.PORT);
 
   logger.info({ port: env.PORT, env: env.NODE_ENV }, "dev-thriller backend up");
   return app;
 }
 
-bootstrap().catch((err) => {
-  console.error("Bootstrap failed:", err);
-  process.exit(1);
-});
+// Only auto-bootstrap when running as the entrypoint (not when imported from tests).
+if (import.meta.main) {
+  bootstrap().catch((err) => {
+    console.error("Bootstrap failed:", err);
+    process.exit(1);
+  });
+}
 
 // Re-export the Elysia app type for Eden Treaty. Callers can `import type { App } from '@dt/backend'`.
-export type App = Awaited<ReturnType<typeof bootstrap>>;
+export type App = ReturnType<typeof buildApp>;

@@ -8,7 +8,9 @@
     "dev": "bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
     "typecheck": "tsc --noEmit",
+    "test": "bun test",
     "seed": "bun run src/scripts/seed.ts",
+    "seed:e2e": "bun run scripts/seed-e2e.ts",
     "atlas:indexes": "bun run src/scripts/apply-search-indexes.ts"
   },
   "dependencies": {
