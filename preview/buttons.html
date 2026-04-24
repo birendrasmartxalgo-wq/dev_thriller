@@ -1,0 +1,43 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>body{margin:0;padding:24px;background:var(--bg);display:flex;flex-direction:column;gap:18px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.lab{font:var(--fw-med) 11px/1 var(--font-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--fg3);width:100px}
+.btn{font:var(--fw-semi) 14px/1 var(--font-sans);padding:10px 16px;border-radius:10px;border:1px solid transparent;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all 140ms var(--ease-out)}
+.btn-primary{background:var(--ember-500);color:#FFFDF8;box-shadow:var(--sh-1),var(--sh-inset)}
+.btn-primary:hover{background:var(--ember-700)}
+.btn-secondary{background:var(--paper-0);color:var(--fg1);border-color:var(--border)}
+.btn-secondary:hover{background:var(--paper-100)}
+.btn-ghost{background:transparent;color:var(--fg1)}
+.btn-ghost:hover{background:var(--paper-100)}
+.btn-danger{background:var(--blood-500);color:#fff}
+.btn-danger:hover{background:var(--blood-700)}
+.btn-ink{background:var(--ink-900);color:#FFFDF8}
+.btn-ink:hover{background:var(--ink-700)}
+.btn-sm{font-size:13px;padding:6px 10px;border-radius:6px}
+.btn-lg{font-size:16px;padding:14px 22px;border-radius:12px}
+</style></head><body>
+<div class="row"><div class="lab">primary</div>
+  <button class="btn btn-primary">Invite teammates</button>
+  <button class="btn btn-primary">Upload file <span style="opacity:.7">→</span></button>
+</div>
+<div class="row"><div class="lab">secondary</div>
+  <button class="btn btn-secondary">Cancel</button>
+  <button class="btn btn-secondary">View all</button>
+</div>
+<div class="row"><div class="lab">ghost</div>
+  <button class="btn btn-ghost">Skip for now</button>
+  <button class="btn btn-ghost">Details</button>
+</div>
+<div class="row"><div class="lab">ink</div>
+  <button class="btn btn-ink">Open dossier</button>
+</div>
+<div class="row"><div class="lab">danger</div>
+  <button class="btn btn-danger">Revoke link</button>
+  <button class="btn btn-danger" style="background:transparent;color:var(--blood-500);border:1px solid var(--blood-500)">Delete</button>
+</div>
+<div class="row"><div class="lab">sizes</div>
+  <button class="btn btn-primary btn-sm">Sm</button>
+  <button class="btn btn-primary">Md (default)</button>
+  <button class="btn btn-primary btn-lg">Lg</button>
+</div>
+</body></html>

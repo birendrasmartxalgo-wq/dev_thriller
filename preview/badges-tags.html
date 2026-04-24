@@ -1,0 +1,32 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>body{margin:0;padding:24px;background:var(--bg);display:flex;flex-direction:column;gap:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.lab{font:var(--fw-med) 11px/1 var(--font-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--fg3);min-width:110px}
+.badge{font:var(--fw-semi) 11px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;padding:5px 8px;border-radius:999px;display:inline-flex;align-items:center;gap:5px}
+.dot{width:6px;height:6px;border-radius:999px;display:inline-block}
+.tag{font:var(--fw-med) 12px/1 var(--font-sans);padding:5px 9px;border-radius:6px;display:inline-flex;align-items:center;gap:6px}
+</style></head><body>
+<div class="row"><div class="lab">status pills</div>
+  <span class="badge" style="background:var(--mint-50);color:var(--mint-900)"><span class="dot" style="background:var(--mint-500)"></span>Resolved</span>
+  <span class="badge" style="background:var(--tape-50);color:var(--tape-900)"><span class="dot" style="background:var(--tape-500)"></span>Uploading</span>
+  <span class="badge" style="background:var(--danger-bg);color:var(--blood-700)"><span class="dot" style="background:var(--blood-500)"></span>Failed</span>
+  <span class="badge" style="background:var(--info-bg);color:var(--lav-900)"><span class="dot" style="background:var(--lav-500)"></span>Reviewing</span>
+  <span class="badge" style="background:var(--ink-50);color:var(--ink-900)"><span class="dot" style="background:var(--ink-500)"></span>Draft</span>
+</div>
+<div class="row"><div class="lab">role badges</div>
+  <span class="badge" style="background:var(--ember-500);color:#fff">Owner</span>
+  <span class="badge" style="background:var(--ink-900);color:#FFFDF8">Admin</span>
+  <span class="badge" style="background:var(--paper-100);color:var(--fg1);border:1px solid var(--border-soft)">Member</span>
+  <span class="badge" style="background:var(--paper-0);color:var(--fg2);border:1px dashed var(--border)">Guest</span>
+</div>
+<div class="row"><div class="lab">file tags</div>
+  <span class="tag" style="background:var(--lav-50);color:var(--lav-900)">#q3-reel</span>
+  <span class="tag" style="background:var(--mint-50);color:var(--mint-900)">#approved</span>
+  <span class="tag" style="background:var(--tape-50);color:var(--tape-900)">#review</span>
+  <span class="tag" style="background:var(--paper-100);color:var(--fg2)">#archive</span>
+</div>
+<div class="row"><div class="lab">case numbers</div>
+  <span class="badge" style="background:var(--paper-100);color:var(--fg2);border:1px solid var(--border-soft)">CASE · 0142</span>
+  <span class="badge" style="background:transparent;color:var(--fg3);border:1px solid var(--border)">FILE · 8812A</span>
+</div>
+</body></html>

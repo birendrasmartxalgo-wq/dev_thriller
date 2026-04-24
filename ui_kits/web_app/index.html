@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dev Thriller · Web App</title>
+<link rel="stylesheet" href="../../colors_and_type.css">
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" type="image/svg+xml" href="../../assets/logo-monogram.svg">
+<style>
+  html, body { height: 100%; }
+  #root { height: 100vh; }
+  /* Tweaks panel */
+  .tw-panel { position: fixed; right: 16px; bottom: 16px; width: 260px; background: var(--paper-0); border: 1px solid var(--border-soft); border-radius: 12px; box-shadow: var(--sh-3); padding: 12px 14px; font: 400 13px/1.4 var(--font-sans); z-index: 50; }
+  .tw-panel h4 { font: 700 11px/1 var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--fg3); margin-bottom: 8px; display:flex; align-items:center; justify-content:space-between; }
+  .tw-row { display: grid; grid-template-columns: 1fr auto; align-items:center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border-soft); font-size: 13px; }
+  .tw-row:first-of-type { border-top: 0; }
+  .tw-seg { display: inline-flex; background: var(--paper-100); border-radius: 6px; padding: 2px; border:1px solid var(--border-soft); }
+  .tw-seg button { font: 500 11px/1 var(--font-sans); padding: 4px 8px; border-radius:4px; border:0; background:transparent; cursor:pointer; color: var(--fg2); }
+  .tw-seg button.on { background: var(--ember-500); color: #fff; }
+  .tw-close { cursor: pointer; color: var(--fg3); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="Shell.jsx"></script>
+<script type="text/babel" src="Chat.jsx"></script>
+<script type="text/babel" src="Login.jsx"></script>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+const { I, Sidebar, Topbar, ChatView, ThreadPanel, MediaView, FilesView, UploadPill, LoginScreen } = UIKit;
+
+const TWEAKS = /*EDITMODE-BEGIN*/{
+  "screen": "chat",
+  "chatVariant": "classic",
+  "loginVariant": "classic",
+  "showThread": true,
+  "showUpload": true
+}/*EDITMODE-END*/;
+
+function App() {
+  const [signedIn, setSignedIn] = useState(true);
+  const [tweaks, setTweaks] = useState(TWEAKS);
+  const [tweaksOpen, setTweaksOpen] = useState(false);
+  const [view, setView] = useState(tweaks.screen);   // chat / files / media / inbox / people
+  const [activeChat, setActiveChat] = useState('q3-campaign');
+
+  // Tweak-mode protocol
+  useEffect(() => {
+    const h = (e) => {
+      if (e.data?.type === '__activate_edit_mode') setTweaksOpen(true);
+      if (e.data?.type === '__deactivate_edit_mode') setTweaksOpen(false);
+    };
+    window.addEventListener('message', h);
+    window.parent.postMessage({type:'__edit_mode_available'}, '*');
+    return () => window.removeEventListener('message', h);
+  }, []);
+
+  const update = (k, v) => {
+    const n = { ...tweaks, [k]: v };
+    setTweaks(n);
+    if (k === 'screen') setView(v);
+    window.parent.postMessage({type:'__edit_mode_set_keys', edits: { [k]: v }}, '*');
+  };
+  const closeTweaks = () => {
+    setTweaksOpen(false);
+    window.parent.postMessage({type:'__edit_mode_dismissed'}, '*');
+  };
+
+  const chats = {
+    'general': { id: 'general', name: 'general', type: 'hash' },
+    'q3-campaign': { id: 'q3-campaign', name: 'q3-campaign', type: 'hash' },
+    'reel-cut': { id: 'reel-cut', name: 'reel-cut', type: 'hash' },
+    'founders': { id: 'founders', name: 'founders', type: 'lock' },
+  };
+
+  if (!signedIn) {
+    return <LoginScreen variant={tweaks.loginVariant} onLogin={() => setSignedIn(true)} />;
+  }
+
+  return (
+    <div className="app">
+      <Topbar />
+      <Sidebar activeChat={activeChat} setActiveChat={setActiveChat} view={view} setView={setView}/>
+
+      <div className="main">
+        {view === 'chat' && (
+          <div className="chat-wrap" style={{gridTemplateColumns: tweaks.showThread ? '1fr 300px' : '1fr'}}>
+            <ChatView variant={tweaks.chatVariant} chat={chats[activeChat] || chats['q3-campaign']} />
+            {tweaks.showThread && <ThreadPanel />}
+          </div>
+        )}
+        {view === 'files' && <FilesView />}
+        {view === 'media' && <MediaView />}
+        {view === 'inbox' && (
+          <div className="empty" style={{flex:1}}>
+            <div className="title"><em>You're caught up.</em></div>
+            <div className="sub">Case closed for now. New leads will show up here.</div>
+          </div>
+        )}
+        {view === 'people' && (
+          <div className="empty" style={{flex:1}}>
+            <div className="title">Team roster coming soon.</div>
+            <div className="sub">Directory of members with roles, MFA status, and last-seen.</div>
+          </div>
+        )}
+      </div>
+
+      {tweaks.showUpload && view === 'chat' && <UploadPill pct={62} />}
+
+      {tweaksOpen && (
+        <div className="tw-panel">
+          <h4>Tweaks <span className="tw-close" onClick={closeTweaks}>×</span></h4>
+          <div className="tw-row">
+            <span>Screen</span>
+            <div className="tw-seg">
+              {['chat','files','media'].map(s =>
+                <button key={s} className={tweaks.screen===s?'on':''} onClick={()=>update('screen', s)}>{s}</button>)}
+            </div>
+          </div>
+          <div className="tw-row">
+            <span>Chat variant</span>
+            <div className="tw-seg">
+              {[['classic','Std'],['focused','Focus'],['transcript','Mono']].map(([k,l]) =>
+                <button key={k} className={tweaks.chatVariant===k?'on':''} onClick={()=>update('chatVariant', k)}>{l}</button>)}
+            </div>
+          </div>
+          <div className="tw-row">
+            <span>Login variant</span>
+            <div className="tw-seg">
+              {[['classic','Ink'],['tape','Tape']].map(([k,l]) =>
+                <button key={k} className={tweaks.loginVariant===k?'on':''} onClick={()=>update('loginVariant', k)}>{l}</button>)}
+            </div>
+          </div>
+          <div className="tw-row">
+            <span>Thread panel</span>
+            <div className="tw-seg">
+              {[[true,'On'],[false,'Off']].map(([k,l]) =>
+                <button key={String(k)} className={tweaks.showThread===k?'on':''} onClick={()=>update('showThread', k)}>{l}</button>)}
+            </div>
+          </div>
+          <div className="tw-row">
+            <span>Upload pill</span>
+            <div className="tw-seg">
+              {[[true,'On'],[false,'Off']].map(([k,l]) =>
+                <button key={String(k)} className={tweaks.showUpload===k?'on':''} onClick={()=>update('showUpload', k)}>{l}</button>)}
+            </div>
+          </div>
+          <div className="tw-row" style={{borderTop:'1px solid var(--border-soft)', marginTop:4, paddingTop:8}}>
+            <span style={{color:'var(--fg3)', fontSize:12}}>Sign out (see login)</span>
+            <button className="btn btn-secondary" style={{padding:'4px 10px', fontSize:11}} onClick={() => setSignedIn(false)}>Log out</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

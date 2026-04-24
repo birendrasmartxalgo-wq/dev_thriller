@@ -1,0 +1,381 @@
+/* ========================================================================
+   Dev Thriller — Colors & Typography
+   Case-file playfulness meets dev-tool precision.
+   ======================================================================== */
+
+/* ---- Webfonts (Google Fonts) */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* ========================================================================
+     COLOR — Core palette
+     Each hue ships as a 5-step scale: 50 (tint) · 200 · 500 (brand) · 700 · 900 (deep)
+     ======================================================================== */
+
+  /* Ember — primary. Hot, urgent, evidence-tape red-orange. */
+  --ember-50:  #FFF1EC;
+  --ember-200: #FFC9B6;
+  --ember-500: #FF512E;   /* brand primary */
+  --ember-700: #C8361A;
+  --ember-900: #6B1708;
+
+  /* Ink — deep navy. The case file cover. */
+  --ink-50:  #EDEFF6;
+  --ink-200: #A9B0CC;
+  --ink-500: #3A4272;
+  --ink-700: #1E2247;
+  --ink-900: #0E1130;
+
+  /* Tape — buttery yellow. Highlight tape, warmth, optimism. */
+  --tape-50:  #FFF8E1;
+  --tape-200: #FFE590;
+  --tape-500: #FFCB3D;
+  --tape-700: #D49900;
+  --tape-900: #6E4E00;
+
+  /* Mint — cool green. Success, resolved, "case closed". */
+  --mint-50:  #E7F9F1;
+  --mint-200: #9CE5C4;
+  --mint-500: #2EBD82;
+  --mint-700: #17885A;
+  --mint-900: #0A4630;
+
+  /* Lavender — accent whimsy. Playful tags, decorative pops. */
+  --lav-50:  #F1ECFF;
+  --lav-200: #C9BAFF;
+  --lav-500: #8B6BF0;
+  --lav-700: #5E3DC7;
+  --lav-900: #2B1766;
+
+  /* Blood — deep crimson. Destructive / danger. */
+  --blood-500: #D61F3E;
+  --blood-700: #99142B;
+
+  /* Paper — warm neutrals. Manila folder, typewriter paper. */
+  --paper-0:   #FFFDF8;   /* pure page */
+  --paper-50:  #FAF6EC;   /* default surface */
+  --paper-100: #F1EBDB;   /* raised surface */
+  --paper-200: #E3D9C0;   /* divider / border soft */
+  --paper-300: #C9BD9E;   /* border strong */
+  --paper-400: #8F8467;
+
+  /* Charcoal — warm near-black for type. */
+  --char-500: #595243;
+  --char-700: #35301F;
+  --char-900: #1B1808;
+
+  /* ========================================================================
+     SEMANTIC tokens — reference these in components, never the raw scales.
+     ======================================================================== */
+
+  /* Surfaces */
+  --bg:             var(--paper-50);
+  --bg-raised:      var(--paper-0);
+  --bg-sunken:      var(--paper-100);
+  --bg-inverse:     var(--ink-900);
+  --bg-accent:      var(--ember-500);
+
+  /* Foreground text */
+  --fg1:            var(--char-900);   /* primary body */
+  --fg2:            var(--char-700);   /* secondary body */
+  --fg3:            var(--char-500);   /* tertiary / meta */
+  --fg4:            var(--paper-400);  /* disabled / hint */
+  --fg-on-accent:   var(--paper-0);
+  --fg-on-inverse:  var(--paper-50);
+  --fg-link:        var(--ember-700);
+
+  /* Borders */
+  --border-soft:    var(--paper-200);
+  --border:         var(--paper-300);
+  --border-strong:  var(--char-500);
+  --border-accent:  var(--ember-500);
+
+  /* Status */
+  --success:        var(--mint-500);
+  --success-bg:     var(--mint-50);
+  --warning:        var(--tape-500);
+  --warning-bg:     var(--tape-50);
+  --danger:         var(--blood-500);
+  --danger-bg:      #FEECEE;
+  --info:           var(--lav-500);
+  --info-bg:        var(--lav-50);
+
+  /* ========================================================================
+     TYPOGRAPHY — Families
+     ======================================================================== */
+  --font-display: 'Source Serif 4', 'Source Serif Pro', Georgia, 'Times New Roman', serif;
+  --font-sans:    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Type scale (fluid-ready, but here in px for determinism) */
+  --ts-micro:  11px;   /* case-number labels, tiny meta */
+  --ts-xs:     12px;
+  --ts-sm:     13px;
+  --ts-base:   15px;   /* body default */
+  --ts-md:     17px;
+  --ts-lg:     20px;
+  --ts-xl:     24px;
+  --ts-2xl:    32px;
+  --ts-3xl:    44px;
+  --ts-4xl:    60px;
+  --ts-5xl:    84px;
+
+  /* Weights */
+  --fw-reg:    400;
+  --fw-med:    500;
+  --fw-semi:   600;
+  --fw-bold:   700;
+  --fw-black:  800;
+
+  /* Leading */
+  --lh-tight:  1.05;
+  --lh-snug:   1.2;
+  --lh-normal: 1.45;
+  --lh-loose:  1.6;
+
+  /* Tracking */
+  --track-tight:  -0.02em;
+  --track-snug:   -0.01em;
+  --track-normal: 0em;
+  --track-wide:   0.06em;
+  --track-caps:   0.14em;
+
+  /* ========================================================================
+     SPACING — 4-px base rhythm
+     ======================================================================== */
+  --s-0:   0;
+  --s-1:   2px;
+  --s-2:   4px;
+  --s-3:   8px;
+  --s-4:   12px;
+  --s-5:   16px;
+  --s-6:   20px;
+  --s-7:   24px;
+  --s-8:   32px;
+  --s-9:   40px;
+  --s-10:  56px;
+  --s-11:  80px;
+  --s-12:  120px;
+
+  /* ========================================================================
+     RADII — Slightly tighter than consumer-soft. Dev tools feel.
+     ======================================================================== */
+  --r-xs:   3px;
+  --r-sm:   6px;
+  --r-md:   10px;
+  --r-lg:   14px;
+  --r-xl:   20px;
+  --r-pill: 999px;
+
+  /* ========================================================================
+     SHADOW / ELEVATION — Warm, not grey. Layered like paper.
+     ======================================================================== */
+  --sh-0:   none;
+  --sh-1:   0 1px 0 rgba(53, 48, 31, 0.05), 0 1px 2px rgba(53, 48, 31, 0.06);
+  --sh-2:   0 2px 4px rgba(53, 48, 31, 0.06), 0 4px 12px rgba(53, 48, 31, 0.08);
+  --sh-3:   0 4px 8px rgba(53, 48, 31, 0.08), 0 12px 28px rgba(53, 48, 31, 0.12);
+  --sh-4:   0 8px 16px rgba(53, 48, 31, 0.10), 0 24px 56px rgba(53, 48, 31, 0.16);
+  --sh-inset: inset 0 1px 0 rgba(255, 253, 248, 0.5);
+  --sh-focus: 0 0 0 3px rgba(255, 81, 46, 0.35);
+
+  /* ========================================================================
+     MOTION
+     ======================================================================== */
+  --ease-out:    cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in:     cubic-bezier(0.5, 0, 0.75, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);   /* slight overshoot */
+  --dur-fast:    140ms;
+  --dur:         220ms;
+  --dur-slow:    360ms;
+
+  /* ========================================================================
+     LAYOUT
+     ======================================================================== */
+  --container-max: 1280px;
+  --sidebar-w:     260px;
+  --header-h:      56px;
+}
+
+/* ==========================================================================
+   SEMANTIC TYPE CLASSES — use these in components.
+   ========================================================================== */
+
+/* Display — thriller-novel serif. Use sparingly for hero moments. */
+.t-hero {
+  font-family: var(--font-display);
+  font-weight: var(--fw-reg);
+  font-size: var(--ts-5xl);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--track-tight);
+  color: var(--fg1);
+}
+.t-display {
+  font-family: var(--font-display);
+  font-weight: var(--fw-reg);
+  font-size: var(--ts-4xl);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--track-tight);
+  color: var(--fg1);
+}
+.t-display-italic {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: var(--fw-reg);
+  font-size: var(--ts-4xl);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--track-tight);
+  color: var(--fg1);
+}
+
+/* Headings — UI sans, tighter than body. */
+.t-h1 {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-bold);
+  font-size: var(--ts-3xl);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--track-snug);
+  color: var(--fg1);
+}
+.t-h2 {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-bold);
+  font-size: var(--ts-2xl);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--track-snug);
+  color: var(--fg1);
+}
+.t-h3 {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-semi);
+  font-size: var(--ts-xl);
+  line-height: var(--lh-snug);
+  color: var(--fg1);
+}
+.t-h4 {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-semi);
+  font-size: var(--ts-lg);
+  line-height: var(--lh-snug);
+  color: var(--fg1);
+}
+
+/* Body */
+.t-body {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-reg);
+  font-size: var(--ts-base);
+  line-height: var(--lh-normal);
+  color: var(--fg1);
+}
+.t-body-sm {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-reg);
+  font-size: var(--ts-sm);
+  line-height: var(--lh-normal);
+  color: var(--fg2);
+}
+.t-body-strong {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-semi);
+  font-size: var(--ts-base);
+  line-height: var(--lh-normal);
+  color: var(--fg1);
+}
+
+/* Meta / labels — uppercase mono, like case-file stamps. */
+.t-label {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-med);
+  font-size: var(--ts-xs);
+  line-height: var(--lh-normal);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--fg3);
+}
+.t-caseno {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-med);
+  font-size: var(--ts-micro);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--fg3);
+}
+.t-meta {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-reg);
+  font-size: var(--ts-xs);
+  color: var(--fg3);
+}
+.t-code {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-reg);
+  font-size: var(--ts-sm);
+  color: var(--fg1);
+  background: var(--paper-100);
+  padding: 1px 5px;
+  border-radius: var(--r-xs);
+  border: 1px solid var(--border-soft);
+}
+
+/* Links */
+.t-link {
+  color: var(--fg-link);
+  text-decoration-line: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--ember-200);
+  transition: text-decoration-color var(--dur-fast) var(--ease-out);
+}
+.t-link:hover {
+  text-decoration-color: var(--ember-500);
+}
+
+/* ==========================================================================
+   ELEMENT DEFAULTS — low-opinion baseline.
+   ========================================================================== */
+html, body {
+  background: var(--bg);
+  color: var(--fg1);
+  font-family: var(--font-sans);
+  font-size: var(--ts-base);
+  line-height: var(--lh-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+*, *::before, *::after { box-sizing: border-box; }
+
+h1 { font: var(--fw-bold) var(--ts-3xl)/var(--lh-snug) var(--font-sans); letter-spacing: var(--track-snug); margin: 0; }
+h2 { font: var(--fw-bold) var(--ts-2xl)/var(--lh-snug) var(--font-sans); letter-spacing: var(--track-snug); margin: 0; }
+h3 { font: var(--fw-semi) var(--ts-xl)/var(--lh-snug) var(--font-sans); margin: 0; }
+h4 { font: var(--fw-semi) var(--ts-lg)/var(--lh-snug) var(--font-sans); margin: 0; }
+p  { font: var(--fw-reg) var(--ts-base)/var(--lh-normal) var(--font-sans); margin: 0; color: var(--fg1); }
+
+a  { color: var(--fg-link); text-decoration: underline; text-decoration-color: var(--ember-200); text-underline-offset: 2px; }
+a:hover { text-decoration-color: var(--ember-500); }
+
+code, pre { font-family: var(--font-mono); font-size: 0.92em; }
+
+/* Selection — tape yellow highlight */
+::selection { background: var(--tape-200); color: var(--char-900); }
+
+/* Focus ring — ember */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--sh-focus);
+  border-radius: var(--r-sm);
+}
+
+/* ==========================================================================
+   UTILITY: the "tape highlight" underline — core brand motif.
+   Use on a <span> around a word to get a handwritten-highlight effect.
+   ========================================================================== */
+.tape-highlight {
+  background: linear-gradient(180deg, transparent 60%, var(--tape-200) 60%, var(--tape-200) 92%, transparent 92%);
+  padding: 0 2px;
+}
+.tape-highlight--ember {
+  background: linear-gradient(180deg, transparent 60%, var(--ember-200) 60%, var(--ember-200) 92%, transparent 92%);
+  padding: 0 2px;
+}

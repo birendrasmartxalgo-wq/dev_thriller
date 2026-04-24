@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Dev Thriller · Web App</title>
+<meta name="viewport" content="width=1280"/>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<link rel="stylesheet" href="app.css"/>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script>window.DT = window.DT || {};</script>
+<script type="text/babel" src="icons.jsx"></script>
+<script type="text/babel" src="shell.jsx"></script>
+<script type="text/babel" src="auth.jsx"></script>
+<script type="text/babel" src="chat.jsx"></script>
+<script type="text/babel" src="files.jsx"></script>
+<script type="text/babel" src="extras.jsx"></script>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+const { I } = window.DT;
+const { Topbar, Sidebar, TopNav } = window.DT.Shell;
+const { Login, Signup, Onboarding } = window.DT.Auth;
+const { Dashboard, Chat } = window.DT.ChatMod;
+const { Files, Gallery, VideoPlayer } = window.DT.FilesMod;
+const { SearchPalette, Settings, Inbox, Shortcuts, People } = window.DT.ExtraMod;
+const { CASES } = window.DT.DATA;
+
+function App() {
+  const [mode, setMode] = useState('app'); // login | signup | onboard | app
+  const [theme, setTheme] = useState('light');
+  const [navStyle, setNavStyle] = useState('side'); // side | top
+  const [route, setRoute] = useState('dashboard');
+  const [chatId, setChatId] = useState('q3-campaign');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
+    const k = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setSearchOpen(true); }
+      if (e.key === '?' && !['INPUT','TEXTAREA'].includes(document.activeElement?.tagName)) { e.preventDefault(); setShortcutsOpen(true); }
+    };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, []);
+
+  const nav = (r, id) => { setRoute(r); if (id) setChatId(id); };
+  const openChat = (id) => { setRoute('chat'); setChatId(id); };
+
+  useEffect(() => {
+    if (route === 'shortcuts') { setShortcutsOpen(true); setRoute('dashboard'); }
+  }, [route]);
+
+  if (mode === 'login') return <Login onLogin={() => setMode('app')} onSignup={() => setMode('signup')}/>;
+  if (mode === 'signup') return <Signup onLogin={() => setMode('onboard')}/>;
+  if (mode === 'onboard') return <Onboarding onDone={() => setMode('app')}/>;
+
+  const page = {
+    dashboard: <Dashboard nav={nav}/>,
+    chat: <Chat chatId={chatId} onOpenPlayer={() => setRoute('player')}/>,
+    files: <Files onPreview={() => setRoute('player')}/>,
+    gallery: <Gallery/>,
+    player: <VideoPlayer/>,
+    inbox: <Inbox/>,
+    settings: <Settings/>,
+    people: <People/>,
+  }[route] || <Dashboard nav={nav}/>;
+
+  return (
+    <div className="app" data-nav={navStyle}>
+      <Topbar
+        currentCase={CASES[0]}
+        onOpenSearch={() => setSearchOpen(true)}
+        onToggleTheme={() => setTheme(t => t === 'light' ? 'dark' : 'light')}
+        theme={theme}
+        unread={4}
+        onNav={nav}
+      />
+      <TopNav route={route} nav={nav}/>
+      <Sidebar route={route} nav={nav} chatId={chatId} openChat={openChat}/>
+      <div className="main">{page}</div>
+
+      {/* Auth quick-jump chips (for demo) */}
+      <div style={{position:'fixed', right:14, bottom:14, display:'flex', flexDirection:'column', gap:6, zIndex:40}}>
+        <div style={{background:'var(--paper-0)', border:'1px solid var(--border-soft)', borderRadius:999, padding:'6px 8px', display:'flex', gap:4, boxShadow:'var(--sh-2)'}}>
+          <button className="btn btn-ghost" style={{fontSize:11, padding:'4px 8px'}} onClick={() => setNavStyle(n => n==='side'?'top':'side')}>{navStyle==='side'?'Top nav':'Side nav'}</button>
+          <button className="btn btn-ghost" style={{fontSize:11, padding:'4px 8px'}} onClick={() => setMode('login')}>Login</button>
+          <button className="btn btn-ghost" style={{fontSize:11, padding:'4px 8px'}} onClick={() => setMode('signup')}>Sign up</button>
+          <button className="btn btn-ghost" style={{fontSize:11, padding:'4px 8px'}} onClick={() => setMode('onboard')}>Onboarding</button>
+          <button className="btn btn-ghost" style={{fontSize:11, padding:'4px 8px'}} onClick={() => setShortcutsOpen(true)}>⌨ ?</button>
+        </div>
+      </div>
+
+      {searchOpen && <SearchPalette onClose={() => setSearchOpen(false)} onNav={nav}/>}
+      {shortcutsOpen && <Shortcuts onClose={() => setShortcutsOpen(false)}/>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

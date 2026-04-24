@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Dev Thriller · Mobile App</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<link rel="stylesheet" href="app.css"/>
+<style>
+  html, body { overflow: visible; height: auto; background: #F5EEDA; }
+  body { padding: 0; margin: 0; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="web_kit_shell.jsx"></script>
+<script type="text/babel" src="mobile-screens.jsx"></script>
+
+<script type="text/babel">
+const { useState } = React;
+const { IOSDevice } = window;
+const { MobileLogin, MobileChatList, MobileChatThread, MobileMedia, MobileUpload } = window.UIKit;
+const { DesignCanvas, DCSection, DCArtboard } = window;
+
+// Stateful mobile nav: tab bar + chat list -> thread
+function MobileApp() {
+  const [tab, setTab] = useState('chats');
+  const [openChat, setOpenChat] = useState(null);
+
+  if (tab === 'chats' && openChat) {
+    return <MobileChatThread chat={openChat} onBack={() => setOpenChat(null)}/>;
+  }
+  const body = {
+    chats: <MobileChatList onOpenChat={(c) => setOpenChat(c)}/>,
+    media: <MobileMedia/>,
+    upload: <MobileUpload/>,
+  }[tab] || <MobileChatList onOpenChat={setOpenChat}/>;
+
+  // patch tab bar control by wrapping and injecting onChange via React.Children
+  const I = window.UIKit.I;
+  const tabBar = (
+    <div style={{display:'flex', borderTop:'1px solid var(--border-soft)', background:'var(--paper-0)', padding:'8px 0 10px', position:'absolute', left:0, right:0, bottom:34}}>
+      {[
+        { k: 'chats', l: 'Chats', i: I.hash },
+        { k: 'media', l: 'Media', i: I.image },
+        { k: 'files', l: 'Files', i: I.folder },
+        { k: 'upload', l: 'Upload', i: I.plus },
+      ].map(t => (
+        <div key={t.k} onClick={() => { setTab(t.k); setOpenChat(null); }} style={{flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:3, color: tab===t.k ? 'var(--ember-500)' : 'var(--fg3)', cursor:'pointer'}}>
+          <div style={{width:22, height:22}}>{t.i}</div>
+          <span style={{font:'500 10px/1 var(--font-sans)'}}>{t.l}</span>
+        </div>
+      ))}
+    </div>
+  );
+
+  // If screen already has its own tab bar, let ours sit on top; to avoid double tab bar
+  // we just return the body as-is (screens already include MobileTabBar).
+  return body;
+}
+
+// -------------- Additional mobile screens --------------
+function MobileProfile() {
+  return (
+    <div style={{height:'100%', background:'var(--bg)', paddingTop:54, display:'flex', flexDirection:'column', color:'var(--fg1)'}}>
+      <div style={{padding:'12px 16px 18px', borderBottom:'1px solid var(--border-soft)', background:'var(--paper-0)'}}>
+        <div style={{font:'500 10px/1 var(--font-mono)', letterSpacing:'.14em', textTransform:'uppercase', color:'var(--fg3)', marginBottom:4}}>CASE · 0142 · PROFILE</div>
+        <div style={{font:'700 22px/1 var(--font-sans)'}}>Profile</div>
+      </div>
+      <div style={{flex:1, overflow:'auto', padding:'18px 16px'}}>
+        <div style={{display:'flex', alignItems:'center', gap:12, padding:'14px', border:'1px solid var(--border-soft)', borderRadius:14, background:'var(--paper-0)'}}>
+          <div style={{width:56, height:56, borderRadius:14, background:'var(--ember-500)', color:'#fff', font:'700 20px/1 var(--font-sans)', display:'flex', alignItems:'center', justifyContent:'center'}}>JD</div>
+          <div style={{flex:1}}>
+            <div style={{font:'700 17px/1.2 var(--font-sans)'}}>Jane Director</div>
+            <div style={{color:'var(--fg3)', font:'400 12px/1.3 var(--font-sans)', marginTop:4}}>Owner · Acme Marketing</div>
+            <div style={{display:'flex', gap:5, alignItems:'center', marginTop:6}}>
+              <span style={{width:6, height:6, borderRadius:999, background:'var(--mint-500)'}}/>
+              <span style={{font:'500 11px/1 var(--font-mono)', color:'var(--fg3)'}}>ONLINE · SAN FRANCISCO</span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{marginTop:20, font:'500 10px/1 var(--font-mono)', letterSpacing:'.14em', textTransform:'uppercase', color:'var(--fg3)', padding:'0 4px 8px'}}>ACCOUNT</div>
+        <div style={{border:'1px solid var(--border-soft)', borderRadius:12, background:'var(--paper-0)', overflow:'hidden'}}>
+          {[
+            ['Edit profile', 'Jane Director · she/her'],
+            ['Workspaces', '3 workspaces'],
+            ['Notifications', 'Mentions + DMs'],
+            ['Privacy & security', '2FA enabled'],
+            ['Storage', '4.2 GB of 1 TB'],
+          ].map(([l, s], i) => (
+            <div key={i} style={{display:'flex', alignItems:'center', padding:'13px 14px', borderTop: i===0?0:'1px solid var(--border-soft)'}}>
+              <div style={{flex:1}}>
+                <div style={{font:'500 14px/1.2 var(--font-sans)'}}>{l}</div>
+                <div style={{font:'400 12px/1.3 var(--font-sans)', color:'var(--fg3)', marginTop:2}}>{s}</div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" className="icon"><path d="m9 18 6-6-6-6"/></svg>
+            </div>
+          ))}
+        </div>
+
+        <div style={{marginTop:20, font:'500 10px/1 var(--font-mono)', letterSpacing:'.14em', textTransform:'uppercase', color:'var(--fg3)', padding:'0 4px 8px'}}>WORKSPACE</div>
+        <div style={{display:'grid', gap:8}}>
+          {[
+            ['Acme Marketing','M','var(--ember-500)','12 members · active'],
+            ['Indie Studio','I','var(--lav-500)','3 members'],
+            ['Weekend Side Project','W','var(--mint-500)','just you'],
+          ].map(([n, ini, c, s], i) => (
+            <div key={i} style={{display:'flex', alignItems:'center', gap:10, padding:'10px 14px', border:'1px solid var(--border-soft)', borderRadius:12, background:'var(--paper-0)'}}>
+              <div style={{width:38, height:38, borderRadius:10, background:c, color:'#fff', font:'700 15px/1 var(--font-sans)', display:'flex', alignItems:'center', justifyContent:'center'}}>{ini}</div>
+              <div style={{flex:1, minWidth:0}}>
+                <div style={{font:'600 14px/1.2 var(--font-sans)'}}>{n}</div>
+                <div style={{font:'400 12px/1.3 var(--font-sans)', color:'var(--fg3)'}}>{s}</div>
+              </div>
+              {i===0 && <span style={{font:'500 10px/1 var(--font-mono)', color:'var(--ember-700)', padding:'4px 8px', border:'1px solid var(--ember-500)', borderRadius:4}}>CURRENT</span>}
+            </div>
+          ))}
+        </div>
+
+        <button style={{marginTop:20, width:'100%', padding:'14px', borderRadius:12, border:'1px solid var(--border-soft)', background:'var(--paper-0)', color:'var(--blood-700)', font:'600 14px/1 var(--font-sans)', cursor:'pointer'}}>Sign out</button>
+      </div>
+    </div>
+  );
+}
+
+function MobileVideoReview() {
+  const I = window.UIKit.I;
+  return (
+    <div style={{height:'100%', background:'#0B0E26', paddingTop:54, display:'flex', flexDirection:'column', color:'#fff'}}>
+      <div style={{padding:'12px 16px', display:'flex', alignItems:'center', gap:10}}>
+        <svg width="20" height="20" viewBox="0 0 24 24" className="icon" style={{color:'#fff'}}><path d="m15 18-6-6 6-6"/></svg>
+        <div style={{flex:1}}>
+          <div style={{font:'700 15px/1 var(--font-sans)'}}>reel-final-v4.mp4</div>
+          <div style={{font:'500 10px/1 var(--font-mono)', letterSpacing:'.14em', color:'rgba(255,255,255,.6)', marginTop:3}}>UPLOADING · 62% · 842 MB</div>
+        </div>
+        <div style={{width:34, height:34, borderRadius:999, background:'rgba(255,255,255,.12)', display:'flex', alignItems:'center', justifyContent:'center'}}>{I.moreH}</div>
+      </div>
+
+      <div style={{flex:1, display:'flex', flexDirection:'column'}}>
+        <div style={{flex:1, position:'relative', background:'linear-gradient(135deg, #1E2247, #5E3DC7)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 12px', borderRadius:16, overflow:'hidden'}}>
+          <div style={{width:64, height:64, borderRadius:999, background:'rgba(255,253,248,.95)', color:'#0E1130', display:'flex', alignItems:'center', justifyContent:'center'}}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </div>
+          <div style={{position:'absolute', right:12, bottom:12, font:'500 11px/1 var(--font-mono)', background:'rgba(14,17,48,.75)', color:'#fff', padding:'5px 8px', borderRadius:5}}>0:34 / 2:14</div>
+        </div>
+
+        <div style={{padding:'16px 16px 10px'}}>
+          <div style={{position:'relative', height:28}}>
+            <div style={{position:'absolute', inset:'12px 0', background:'rgba(255,255,255,.18)', borderRadius:3}}/>
+            <div style={{position:'absolute', inset:'12px 0', width:'26%', background:'var(--ember-500)', borderRadius:3}}/>
+            {[{t:4,c:'var(--ember-500)'},{t:22,c:'var(--lav-500)'},{t:67,c:'var(--mint-500)'}].map((m,i) => (
+              <div key={i} style={{position:'absolute', top:5, left:`${(m.t/134)*100}%`, transform:'translateX(-50%)', width:18, height:18, borderRadius:999, background:m.c, border:'2px solid #fff', font:'700 9px/14px var(--font-sans)', color:'#fff', textAlign:'center'}}>{i+1}</div>
+            ))}
+          </div>
+          <div style={{display:'flex', alignItems:'center', gap:8, marginTop:10}}>
+            <button style={{width:44, height:44, borderRadius:999, background:'#fff', color:'#0E1130', border:0, display:'flex', alignItems:'center', justifyContent:'center'}}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            </button>
+            <span style={{font:'500 12px/1 var(--font-mono)'}}>0:34 / 2:14</span>
+            <div style={{flex:1}}/>
+            <div style={{width:36, height:36, borderRadius:999, background:'rgba(255,255,255,.12)', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff'}}>{I.volume}</div>
+          </div>
+        </div>
+
+        <div style={{background:'#FFFDF8', color:'var(--fg1)', borderTopLeftRadius:22, borderTopRightRadius:22, padding:'16px', marginTop:6, minHeight:230}}>
+          <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:14}}>
+            <strong style={{fontSize:15}}>Comments</strong>
+            <span style={{font:'500 10px/1 var(--font-mono)', color:'var(--fg3)'}}>3</span>
+            <div style={{flex:1}}/>
+            <button style={{padding:'5px 10px', borderRadius:999, border:'1px solid var(--border-soft)', background:'var(--paper-0)', font:'500 11px/1 var(--font-sans)', color:'var(--fg2)'}}>+ Comment at 0:34</button>
+          </div>
+          {[
+            {w:'RS',a:'Rahul',c:'var(--ember-500)',t:'0:04',b:'Cold-open runs long.'},
+            {w:'MK',a:'Mia',c:'var(--lav-500)',t:'0:22',b:'Color looks warm on this LUT.'},
+            {w:'JL',a:'Jae',c:'var(--mint-500)',t:'1:07',b:'Transition feels abrupt.'},
+          ].map((c,i) => (
+            <div key={i} style={{display:'grid', gridTemplateColumns:'28px 1fr', gap:8, padding:'8px 0', borderTop: i===0?0:'1px solid var(--border-soft)'}}>
+              <div style={{width:24, height:24, borderRadius:999, background:c.c, color:'#fff', font:'600 10px/24px var(--font-sans)', textAlign:'center'}}>{c.w}</div>
+              <div>
+                <div style={{display:'flex', gap:6, alignItems:'baseline'}}>
+                  <strong style={{fontSize:12}}>{c.a}</strong>
+                  <span style={{font:'500 10px/1 var(--font-mono)', color:'var(--ember-700)'}}>{c.t}</span>
+                </div>
+                <div style={{fontSize:13, marginTop:3}}>{c.b}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MobileSearch() {
+  const I = window.UIKit.I;
+  return (
+    <div style={{height:'100%', background:'var(--bg)', paddingTop:54, display:'flex', flexDirection:'column'}}>
+      <div style={{padding:'12px 16px 10px', background:'var(--paper-0)', borderBottom:'1px solid var(--border-soft)'}}>
+        <div style={{position:'relative'}}>
+          <div style={{position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', color:'var(--fg3)'}}>{I.search}</div>
+          <input autoFocus defaultValue="reel" placeholder="Search files, chats, people..." style={{width:'100%', height:40, padding:'0 14px 0 38px', borderRadius:12, border:'1px solid var(--border-soft)', background:'var(--paper-50)', font:'400 15px/1 var(--font-sans)', outline:'none'}}/>
+        </div>
+        <div style={{display:'flex', gap:6, overflowX:'auto', marginTop:10}}>
+          {['All','Files','Chats','People','Actions'].map((f,i) => (
+            <div key={f} style={{padding:'5px 11px', borderRadius:999, border:'1px solid var(--border-soft)', background: i===1 ? 'var(--ink-900)' : 'var(--paper-0)', color: i===1 ? '#fff' : 'var(--fg2)', font:'600 12px/1 var(--font-sans)', whiteSpace:'nowrap'}}>{f}</div>
+          ))}
+        </div>
+      </div>
+      <div style={{flex:1, overflow:'auto', padding:'14px 14px 80px'}}>
+        <div style={{font:'500 10px/1 var(--font-mono)', letterSpacing:'.14em', textTransform:'uppercase', color:'var(--fg3)', padding:'0 4px 8px'}}>FILES · 4</div>
+        <div style={{display:'grid', gap:8}}>
+          {[
+            {n:'reel-final-v4.mp4',k:'MP4',c:'var(--blood-500)',s:'842 MB · uploading 62%',st:'warn'},
+            {n:'reel-final-v3.mp4',k:'MP4',c:'var(--blood-500)',s:'838 MB · locked · verified',st:'success'},
+            {n:'reel-raw-0421.zip',k:'ZIP',c:'var(--ink-500)',s:'2.1 GB · 6 days ago'},
+            {n:'reel-storyboard.pdf',k:'PDF',c:'var(--blood-700)',s:'4.8 MB · Jane · yesterday'},
+          ].map((f,i) => (
+            <div key={i} style={{display:'flex', alignItems:'center', gap:10, padding:'10px 12px', border:'1px solid var(--border-soft)', borderRadius:10, background:'var(--paper-0)'}}>
+              <div style={{width:38, height:38, borderRadius:8, background:f.c, color:'#fff', font:'700 10px/1 var(--font-mono)', display:'flex', alignItems:'center', justifyContent:'center'}}>{f.k}</div>
+              <div style={{flex:1, minWidth:0}}>
+                <div style={{font:'600 14px/1.2 var(--font-sans)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
+                  <span style={{background:'var(--ember-50)', color:'var(--ember-700)', padding:'0 2px', borderRadius:2}}>reel</span>{f.n.slice(4)}
+                </div>
+                <div style={{font:'400 11px/1.3 var(--font-mono)', color:'var(--fg3)', marginTop:2}}>{f.s}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{marginTop:22, font:'500 10px/1 var(--font-mono)', letterSpacing:'.14em', textTransform:'uppercase', color:'var(--fg3)', padding:'0 4px 8px'}}>CHATS · 2</div>
+        <div style={{display:'grid', gap:8}}>
+          {[
+            ['#reel-cut','892 msgs · 4 members','var(--mint-500)','#'],
+            ['"cut 6s from the cold-open"','#q3-campaign · Rahul · 2 h ago','var(--ember-500)','"'],
+          ].map((r,i) => (
+            <div key={i} style={{display:'flex', alignItems:'center', gap:10, padding:'10px 12px', border:'1px solid var(--border-soft)', borderRadius:10, background:'var(--paper-0)'}}>
+              <div style={{width:38, height:38, borderRadius:8, background:r[2], color:'#fff', font:'700 14px/1 var(--font-sans)', display:'flex', alignItems:'center', justifyContent:'center'}}>{r[3]}</div>
+              <div style={{flex:1, minWidth:0}}>
+                <div style={{font:'600 14px/1.2 var(--font-sans)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{r[0]}</div>
+                <div style={{font:'400 11px/1.3 var(--font-mono)', color:'var(--fg3)', marginTop:2}}>{r[1]}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MobileInbox() {
+  return (
+    <div style={{height:'100%', background:'var(--bg)', paddingTop:54, display:'flex', flexDirection:'column'}}>
+      <div style={{padding:'12px 16px', borderBottom:'1px solid var(--border-soft)', background:'var(--paper-0)'}}>
+        <div style={{font:'500 10px/1 var(--font-mono)', letterSpacing:'.14em', textTransform:'uppercase', color:'var(--fg3)', marginBottom:4}}>CASE · 0142 · INBOX</div>
+        <div style={{display:'flex', alignItems:'baseline', gap:8}}>
+          <div style={{font:'700 22px/1 var(--font-sans)'}}>Inbox</div>
+          <span style={{font:'italic 400 16px/1 var(--font-display)', color:'var(--fg3)'}}>4 unread</span>
+        </div>
+      </div>
+      <div style={{flex:1, overflow:'auto', padding:'8px 0 80px'}}>
+        {[
+          {w:'RS',c:'var(--ember-500)',a:'Rahul Shah',v:'mentioned you in',t:'#q3-campaign',b:'can you review the director cut?',time:'2m',unread:true},
+          {w:'MK',c:'var(--lav-500)',a:'Mia Kern',v:'replied to your thread in',t:'#reel-cut',b:'Locked version pushed.',time:'14m',unread:true},
+          {w:'✓',c:'var(--mint-500)',a:'System',v:'verified',t:'reel-final-v3.mp4',b:'sha256 ae44…c102',time:'1h',unread:true},
+          {w:'JL',c:'var(--mint-500)',a:'Jae Lim',v:'sent you a DM',t:'',b:'Quick Q about the color grade?',time:'2h',unread:true},
+          {w:'SO',c:'var(--blood-500)',a:'Sam Orellana',v:'shared',t:'voiceover-v2.zip',b:'Link expires in 7 days',time:'yest',unread:false},
+        ].map((n,i) => (
+          <div key={i} style={{display:'grid', gridTemplateColumns:'34px 1fr auto', gap:10, padding:'12px 16px', borderTop: i===0?0:'1px solid var(--border-soft)', background: n.unread ? 'var(--ember-50)' : 'transparent', borderLeft: n.unread ? '3px solid var(--ember-500)' : '3px solid transparent'}}>
+            <div style={{width:34, height:34, borderRadius:999, background:n.c, color:'#fff', font:'600 12px/34px var(--font-sans)', textAlign:'center'}}>{n.w}</div>
+            <div>
+              <div style={{font:'400 13px/1.3 var(--font-sans)'}}>
+                <strong>{n.a}</strong> <span style={{color:'var(--fg2)'}}>{n.v}</span> {n.t && <span style={{color:'var(--ember-700)', fontFamily:'var(--font-mono)', fontSize:12}}>{n.t}</span>}
+              </div>
+              <div style={{font:'400 13px/1.4 var(--font-sans)', color:'var(--fg1)', marginTop:3}}>{n.b}</div>
+            </div>
+            <div style={{font:'500 10px/1 var(--font-mono)', color:'var(--fg3)', whiteSpace:'nowrap'}}>{n.time.toUpperCase()}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// --------- Mount design canvas ---------
+function App() {
+  return (
+    <DesignCanvas title="Dev Thriller — Mobile App" subtitle="Every mobile screen on the iOS 26 Liquid Glass frame. The chat flow is interactive — tap a chat in the list to open the thread.">
+      <DCSection id="auth" title="Onboarding" subtitle="First launch, sign in, empty workspace">
+        <DCArtboard id="m-login" label="Sign in · CASE · 0001" width={402} height={874}>
+          <IOSDevice><MobileLogin/></IOSDevice>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="chat" title="Chat" subtitle="Chat list (tap to open), channel thread, and composer. Interactive: tap a chat in the list.">
+        <DCArtboard id="m-chats" label="Chats (interactive)" width={402} height={874}>
+          <IOSDevice><MobileApp/></IOSDevice>
+        </DCArtboard>
+        <DCArtboard id="m-thread" label="Channel thread #q3-campaign" width={402} height={874}>
+          <IOSDevice><MobileChatThread chat={{n:'q3-campaign'}}/></IOSDevice>
+        </DCArtboard>
+        <DCArtboard id="m-inbox" label="Inbox · mentions & replies" width={402} height={874}>
+          <IOSDevice><MobileInbox/></IOSDevice>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="files" title="Files & Media" subtitle="The media grid, an active chunked upload, global search, and the in-player review surface.">
+        <DCArtboard id="m-media" label="Media grid" width={402} height={874}>
+          <IOSDevice><MobileMedia/></IOSDevice>
+        </DCArtboard>
+        <DCArtboard id="m-upload" label="Chunked upload · resumable" width={402} height={874}>
+          <IOSDevice><MobileUpload/></IOSDevice>
+        </DCArtboard>
+        <DCArtboard id="m-search" label="Search results" width={402} height={874}>
+          <IOSDevice><MobileSearch/></IOSDevice>
+        </DCArtboard>
+        <DCArtboard id="m-video" label="Video review · comments on timeline" width={402} height={874}>
+          <IOSDevice dark={true}><MobileVideoReview/></IOSDevice>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="account" title="Account" subtitle="Profile, workspace switcher, storage.">
+        <DCArtboard id="m-profile" label="Profile & workspaces" width={402} height={874}>
+          <IOSDevice><MobileProfile/></IOSDevice>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
