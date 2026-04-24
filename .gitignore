@@ -18,3 +18,7 @@ Thumbs.db
 .idea/
 .turbo/
 coverage/
+
+# Playwright outputs
+apps/*/playwright-report/
+apps/*/test-results/
