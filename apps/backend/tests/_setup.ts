@@ -34,6 +34,8 @@ mock.module("@/lib/r2", () => ({
     const safe = filename.replace(/[^\w.\- ]/g, "_");
     return `workspaces/${workspaceId}/files/${fileId}/v${version}/${safe}`;
   },
+  putObject: async () => {},
+  uploadAvatar: async (key: string) => `https://r2.test.local/${key}?sig=stub`,
 }));
 
 // Mock the notify fan-out — it writes notifications but we don't want the
