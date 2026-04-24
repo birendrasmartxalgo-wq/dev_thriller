@@ -1,0 +1,119 @@
+# Workers manifests. Three CronJobs (retention, audit-verify, media-extract —
+# one-shot scripts that exit) and one Deployment (thumbnailer — long-running,
+# drains `thumb:jobs` via BRPOP). All four share the same image; the WORKER env
+# var selects the entrypoint.
+#
+# The `envFrom` reference assumes a `dt-backend-env` Secret with the same keys
+# the backend uses (MONGO_URI, REDIS_URL, R2_*, JWT_* — see apps/backend/src/config/env.ts).
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: retention
+  labels: { app: dt-workers, job: retention }
+spec:
+  schedule: "15 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: worker
+              image: devthriller/workers:latest
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: WORKER
+                  value: retention
+              envFrom:
+                - secretRef: { name: dt-backend-env }
+              args: ["sh", "-c", "bun run apps/workers/src/retention.ts --apply"]
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: audit-verify
+  labels: { app: dt-workers, job: audit-verify }
+spec:
+  schedule: "30 4 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: worker
+              image: devthriller/workers:latest
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: WORKER
+                  value: audit-verify
+              envFrom:
+                - secretRef: { name: dt-backend-env }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: media-extract
+  labels: { app: dt-workers, job: media-extract }
+spec:
+  schedule: "45 5 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: worker
+              image: devthriller/workers:latest
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: WORKER
+                  value: media-extract
+              envFrom:
+                - secretRef: { name: dt-backend-env }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: thumbnailer
+  labels: { app: dt-workers, worker: thumbnailer }
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: dt-workers, worker: thumbnailer }
+  template:
+    metadata:
+      labels: { app: dt-workers, worker: thumbnailer }
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: thumbnailer
+          image: devthriller/workers:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: WORKER
+              value: thumbnailer
+          envFrom:
+            - secretRef: { name: dt-backend-env }
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"

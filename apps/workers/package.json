@@ -7,14 +7,19 @@
     "retention": "bun run --env-file ../backend/.env src/retention.ts",
     "media-extract": "bun run --env-file ../backend/.env src/media-extract.ts",
     "audit-verify": "bun run --env-file ../backend/.env src/audit-verify.ts",
+    "thumbnailer": "bun run --env-file ../backend/.env src/thumbnailer.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@dt/backend": "workspace:*",
-    "mongodb": "^6.10.0"
+    "fluent-ffmpeg": "^2.1.3",
+    "ioredis": "^5.4.1",
+    "mongodb": "^6.10.0",
+    "sharp": "^0.33.5"
   },
   "devDependencies": {
     "@types/bun": "^1.1.13",
+    "@types/fluent-ffmpeg": "^2.1.27",
     "bun-types": "^1.1.34",
     "typescript": "^5.6.3"
   }

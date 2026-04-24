@@ -8,6 +8,7 @@ import { writeAudit } from "@/lib/audit";
 import { decodeCursor, encodeCursor } from "../chats/routes";
 import { publishChat } from "@/ws/bus";
 import { notify } from "@/lib/notify";
+import { signDownloadUrl } from "@/lib/r2";
 import type { MessageAttachment, MessageDoc } from "@/db/types";
 
 function oid(s: string) {
@@ -316,18 +317,31 @@ export const messageRoutes = new Elysia({ prefix: "/v1" })
       }
       const limit = Math.min(Number(query.limit ?? 50), 200);
       const items = await col.chatMedia().find(filter).sort({ createdAt: -1 }).limit(limit).toArray();
-      return {
-        items: items.map((m) => ({
-          id: m._id.toHexString(),
-          kind: m.kind,
-          fileId: m.fileId?.toHexString() ?? null,
-          url: m.url ?? null,
-          senderId: m.senderId.toHexString(),
-          metadata: m.metadata ?? null,
-          sizeBytes: m.sizeBytes ?? null,
-          createdAt: m.createdAt,
-        })),
-      };
+      // Batch-fetch file docs for any media rows that carry a fileId so we can
+      // return a thumbnail signed URL if the thumbnailer has produced one.
+      const fileIds = items.map((m) => m.fileId).filter((x): x is ObjectId => Boolean(x));
+      const files = fileIds.length
+        ? await col.files().find({ _id: { $in: fileIds } }).toArray()
+        : [];
+      const fileById = new Map(files.map((f) => [f._id.toHexString(), f]));
+      const outItems = await Promise.all(
+        items.map(async (m) => {
+          const f = m.fileId ? fileById.get(m.fileId.toHexString()) : undefined;
+          const thumbnailUrl = f?.thumbnailKey ? await signDownloadUrl(f.thumbnailKey, 300) : null;
+          return {
+            id: m._id.toHexString(),
+            kind: m.kind,
+            fileId: m.fileId?.toHexString() ?? null,
+            url: m.url ?? null,
+            senderId: m.senderId.toHexString(),
+            metadata: m.metadata ?? null,
+            sizeBytes: m.sizeBytes ?? null,
+            thumbnailUrl,
+            createdAt: m.createdAt,
+          };
+        })
+      );
+      return { items: outItems };
     },
     {
       params: t.Object({ id: t.String() }),

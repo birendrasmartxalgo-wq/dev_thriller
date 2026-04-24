@@ -1,6 +1,7 @@
 import { Elysia, t } from "elysia";
 import { ObjectId, Binary } from "mongodb";
 import { col } from "@/db/mongo";
+import { redis } from "@/db/dragonfly";
 import { authPlugin, requireAuth } from "@/middleware/auth";
 import { Errors } from "@/lib/errors";
 import { getMembership, assertRoleAtLeast } from "@/lib/acl";
@@ -16,6 +17,7 @@ import {
 import { emptyBitmap, getBit, missingBits, setBit } from "@/lib/bitmap";
 import { randomToken } from "@/lib/hash";
 import { writeAudit } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 import { env, r2Configured } from "@/config/env";
 
 const CHUNK_SIZE = 8 * 1024 * 1024; // 8 MB
@@ -184,6 +186,17 @@ export const fileRoutes = new Elysia({ prefix: "/v1" })
         objectId: fileId,
         metadata: { name: sess.filename, size: sess.sizeBytes },
       });
+      // Enqueue thumbnail job for images/videos. Failure here must not block the response.
+      if (sess.mime.startsWith("image/") || sess.mime.startsWith("video/")) {
+        try {
+          await redis.lpush(
+            "thumb:jobs",
+            JSON.stringify({ fileId: fileId.toHexString(), r2Key: sess.r2Key, mime: sess.mime })
+          );
+        } catch (err) {
+          logger.warn({ err, fileId: fileId.toHexString() }, "failed to enqueue thumbnail job");
+        }
+      }
       return { fileId: fileId.toHexString() };
     },
     { params: t.Object({ id: t.String() }) }
@@ -212,6 +225,7 @@ export const fileRoutes = new Elysia({ prefix: "/v1" })
       const mem = await getMembership(f.workspaceId, auth.userId);
       if (!mem) throw Errors.forbidden();
       const url = await signDownloadUrl(f.r2Key, 900);
+      const thumbnailUrl = f.thumbnailKey ? await signDownloadUrl(f.thumbnailKey, 300) : null;
       return {
         id: f._id.toHexString(),
         name: f.name,
@@ -220,8 +234,26 @@ export const fileRoutes = new Elysia({ prefix: "/v1" })
         checksum: f.checksum,
         version: f.version,
         url,
+        thumbnailKey: f.thumbnailKey ?? null,
+        thumbnailUrl,
         createdAt: f.createdAt,
       };
+    },
+    { params: t.Object({ id: t.String() }) }
+  )
+
+  .get(
+    "/files/:id/thumbnail",
+    async ({ auth, params }) => {
+      requireAuth(auth);
+      const id = oid(params.id);
+      const f = await col.files().findOne({ _id: id, deletedAt: { $exists: false } });
+      if (!f) throw Errors.notFound("File");
+      const mem = await getMembership(f.workspaceId, auth.userId);
+      if (!mem) throw Errors.forbidden();
+      if (!f.thumbnailKey) throw Errors.notFound("Thumbnail");
+      const url = await signDownloadUrl(f.thumbnailKey, 300);
+      return { url };
     },
     { params: t.Object({ id: t.String() }) }
   )

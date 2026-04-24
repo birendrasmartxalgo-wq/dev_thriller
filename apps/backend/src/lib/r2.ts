@@ -5,6 +5,7 @@ import {
   CompleteMultipartUploadCommand,
   AbortMultipartUploadCommand,
   GetObjectCommand,
+  PutObjectCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
 } from "@aws-sdk/client-s3";
@@ -78,6 +79,17 @@ export async function signDownloadUrl(key: string, ttlSec = 900) {
 
 export async function deleteObject(key: string) {
   await r2().send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET, Key: key }));
+}
+
+export async function putObject(key: string, body: Buffer | Uint8Array, contentType: string) {
+  await r2().send(
+    new PutObjectCommand({
+      Bucket: env.R2_BUCKET,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    })
+  );
 }
 
 export async function statObject(key: string) {
