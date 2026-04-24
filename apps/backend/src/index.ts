@@ -28,6 +28,9 @@ import { wsRoutes } from "@/ws/routes";
 // importing buildApp() from tests doesn't skew the production number.
 const startedAt = new Date();
 
+// Pure factory — assembles the Elysia app without performing side-effects like
+// `.listen()` or opening DB connections. This keeps the shape knowable statically
+// so Eden Treaty can infer end-to-end types via `type App = ReturnType<typeof buildApp>`.
 export function buildApp() {
   const app = new Elysia()
     .use(
@@ -101,7 +104,8 @@ export async function bootstrap() {
   return app;
 }
 
-// Only auto-bootstrap when running as the entrypoint (not when imported from tests).
+// Only auto-bootstrap when running as the entrypoint (not when imported from
+// tests or when the frontend pulls the `App` type via @dt/shared).
 if (import.meta.main) {
   bootstrap().catch((err) => {
     console.error("Bootstrap failed:", err);
@@ -109,5 +113,5 @@ if (import.meta.main) {
   });
 }
 
-// Re-export the Elysia app type for Eden Treaty. Callers can `import type { App } from '@dt/backend'`.
+// Re-export the Elysia app type for Eden Treaty. Frontend imports via @dt/shared.
 export type App = ReturnType<typeof buildApp>;

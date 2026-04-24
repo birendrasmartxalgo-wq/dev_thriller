@@ -1,6 +1,23 @@
-// Thin API client for the Dev Thriller backend.
-// Uses fetch + Bearer token from localStorage. Refreshes access token on 401.
-// Eden Treaty can be layered on later once types resolve cleanly across the workspace.
+// Typed API client for the Dev Thriller backend — Eden Treaty on top of fetch.
+//
+// The `eden` treaty client is built from the backend's `App` type (re-exported
+// via @dt/shared), giving the frontend end-to-end type inference for path,
+// query, body and response shapes. Runtime validation happens server-side
+// against the Elysia `t.Object(...)` schemas.
+//
+// Previous-generation behaviors preserved:
+//   - Bearer access token from localStorage (tokenStore)
+//   - Single-flight refresh on 401 via POST /v1/auth/refresh
+//   - ApiError shape so existing error handlers keep working
+//   - X-Request-Id propagation into a small per-request debug context
+//
+// `api` is retained as a thin verb-based shim (get/post/patch/delete/put) so the
+// small number of callers that still use a raw path do not need to change. New
+// code should prefer either `eden` directly or the typed helpers in endpoints.ts
+// / adminApi.ts, which are also Eden-backed.
+
+import { treaty } from "@elysiajs/eden";
+import type { App } from "@dt/shared";
 
 const TOKEN_KEY = "dt.access";
 const REFRESH_KEY = "dt.refresh";
@@ -34,9 +51,17 @@ export class ApiError extends Error {
   }
 }
 
-type Method = "GET" | "POST" | "PATCH" | "DELETE" | "PUT";
+// Lightweight per-response debug context. Populated from `X-Request-Id` if the
+// server emitted one so unhandled errors/toasts can quote it.
+export const debugContext: { lastRequestId: string | null } = { lastRequestId: null };
 
 let refreshing: Promise<boolean> | null = null;
+
+function deriveBaseUrl(): string {
+  // Same-origin in the browser (Vite dev proxy forwards /v1 + /docs).
+  if (typeof window !== "undefined") return window.location.origin;
+  return "http://localhost:3000";
+}
 
 async function refreshAccess(): Promise<boolean> {
   if (refreshing) return refreshing;
@@ -44,7 +69,7 @@ async function refreshAccess(): Promise<boolean> {
   if (!rt) return false;
   refreshing = (async () => {
     try {
-      const r = await fetch("/v1/auth/refresh", {
+      const r = await fetch(`${deriveBaseUrl()}/v1/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refreshToken: rt }),
@@ -62,23 +87,106 @@ async function refreshAccess(): Promise<boolean> {
   return refreshing;
 }
 
-async function request<T>(method: Method, path: string, body?: unknown, tries = 1): Promise<T> {
+// Custom fetcher used by both the treaty client and the verb shim. Attaches the
+// bearer token, retries once on 401 after a successful refresh, and scrapes any
+// `X-Request-Id` header into the debug context.
+const authedFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const headers = new Headers(init?.headers ?? {});
+  const access = tokenStore.access;
+  if (access && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${access}`);
+  }
+
+  let res = await fetch(input, { ...init, headers });
+
+  if (res.status === 401 && tokenStore.refresh) {
+    const ok = await refreshAccess();
+    if (ok) {
+      const retryHeaders = new Headers(init?.headers ?? {});
+      const newAccess = tokenStore.access;
+      if (newAccess) retryHeaders.set("Authorization", `Bearer ${newAccess}`);
+      res = await fetch(input, { ...init, headers: retryHeaders });
+    } else {
+      tokenStore.clear();
+    }
+  }
+
+  const reqId = res.headers.get("X-Request-Id");
+  if (reqId) debugContext.lastRequestId = reqId;
+
+  return res;
+};
+
+// The typed treaty client. Route paths are inferred from the backend `App` type.
+// Usage: `await eden.v1.auth.login.post({ email, password })`.
+export const eden = treaty<App>(deriveBaseUrl(), {
+  // `typeof fetch` in lib.dom carries a `preconnect` static method that our
+  // authedFetch wrapper doesn't implement. Treaty only calls the function
+  // signature, so this cast is safe.
+  fetcher: authedFetch as unknown as typeof fetch,
+});
+
+// Maps Eden's `{ status, value }` error to our ApiError shape. The server error
+// plugin emits RFC7807-ish objects with `code`, `detail`, `title`, `errors` —
+// preserve them when present, fall back to generic messages otherwise.
+export function toError(err: unknown): ApiError {
+  if (err && typeof err === "object") {
+    const anyErr = err as {
+      status?: number;
+      value?: unknown;
+      message?: string;
+    };
+    const status = typeof anyErr.status === "number" ? anyErr.status : 0;
+    const v = anyErr.value;
+    if (v && typeof v === "object") {
+      const p = v as {
+        code?: string;
+        detail?: string;
+        title?: string;
+        errors?: unknown;
+      };
+      return new ApiError(
+        status,
+        p.code ?? String(status || "error"),
+        p.detail ?? p.title ?? anyErr.message ?? "Request failed",
+        p.errors
+      );
+    }
+    if (typeof v === "string") {
+      return new ApiError(status, String(status || "error"), v);
+    }
+    if (typeof anyErr.message === "string") {
+      return new ApiError(status, String(status || "error"), anyErr.message);
+    }
+  }
+  return new ApiError(0, "network_error", "Network error");
+}
+
+// Unwrap a treaty response: throw ApiError on error, return typed data on success.
+// Endpoint modules wrap every call with this so callers continue to see their
+// previous promise shape.
+export function unwrap<D, E>(resp: { data: D | null; error: E | null }): D {
+  if (resp.error) throw toError(resp.error);
+  return resp.data as D;
+}
+
+// -----------------------------------------------------------------------------
+// Verb shim — kept for the remaining few callers that still pass raw paths
+// (e.g. SettingsView role change). New code should prefer `eden` or the typed
+// wrappers in endpoints.ts / adminApi.ts.
+// -----------------------------------------------------------------------------
+
+type Method = "GET" | "POST" | "PATCH" | "DELETE" | "PUT";
+
+async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  const access = tokenStore.access;
-  if (access) headers["Authorization"] = `Bearer ${access}`;
 
-  const res = await fetch(path, {
+  const res = await authedFetch(`${deriveBaseUrl()}${path}`, {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-
-  if (res.status === 401 && tries > 0 && tokenStore.refresh) {
-    const ok = await refreshAccess();
-    if (ok) return request<T>(method, path, body, 0);
-    tokenStore.clear();
-  }
 
   if (!res.ok) {
     let payload: { type?: string; title?: string; detail?: string; code?: string; errors?: unknown } = {};
