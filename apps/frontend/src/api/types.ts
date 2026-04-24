@@ -99,6 +99,7 @@ export interface ChatMediaItem {
   senderId: string;
   metadata: Record<string, unknown> | null;
   sizeBytes: number | null;
+  thumbnailUrl?: string | null;
   createdAt: string;
 }
 
@@ -110,6 +111,8 @@ export interface FileDetail {
   checksum: string;
   version: number;
   url: string;
+  thumbnailKey: string | null;
+  thumbnailUrl: string | null;
   createdAt: string;
 }
 
@@ -128,6 +131,7 @@ export interface SearchResult {
     mime: string;
     sizeBytes: number;
     uploaderId: string;
+    thumbnailUrl?: string | null;
     createdAt: string;
   }>;
   parsed: {

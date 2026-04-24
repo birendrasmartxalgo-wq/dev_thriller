@@ -5,9 +5,9 @@ import {
   CompleteMultipartUploadCommand,
   AbortMultipartUploadCommand,
   GetObjectCommand,
+  PutObjectCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
-  PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env, r2Configured } from "@/config/env";
@@ -81,6 +81,17 @@ export async function deleteObject(key: string) {
   await r2().send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET, Key: key }));
 }
 
+export async function putObject(key: string, body: Buffer | Uint8Array, contentType: string) {
+  await r2().send(
+    new PutObjectCommand({
+      Bucket: env.R2_BUCKET,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    })
+  );
+}
+
 export async function statObject(key: string) {
   return r2().send(new HeadObjectCommand({ Bucket: env.R2_BUCKET, Key: key }));
 }
@@ -88,13 +99,6 @@ export async function statObject(key: string) {
 export function fileKey(workspaceId: string, fileId: string, version: number, filename: string) {
   const safe = filename.replace(/[^\w.\- ]/g, "_");
   return `workspaces/${workspaceId}/files/${fileId}/v${version}/${safe}`;
-}
-
-// Small inline put — used for avatars (≤ 1 MB).
-export async function putObject(key: string, body: Buffer, contentType: string) {
-  await r2().send(
-    new PutObjectCommand({ Bucket: env.R2_BUCKET, Key: key, Body: body, ContentType: contentType })
-  );
 }
 
 // Avatar upload — returns a signed URL valid for 7 days.

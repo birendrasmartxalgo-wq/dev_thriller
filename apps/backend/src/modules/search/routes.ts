@@ -5,6 +5,7 @@ import { authPlugin, requireAuth } from "@/middleware/auth";
 import { Errors } from "@/lib/errors";
 import { getMembership } from "@/lib/acl";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { signDownloadUrl } from "@/lib/r2";
 
 // Simple query DSL: `from:@name has:file|image before:YYYY-MM-DD after:YYYY-MM-DD "phrase" freetext`
 interface Parsed {
@@ -160,14 +161,17 @@ export const searchRoutes = new Elysia({ prefix: "/v1/search" })
           createdAt: m.createdAt,
           hasAttachments: Array.isArray(m.attachments) && m.attachments.length > 0,
         })),
-        files: files.map((f) => ({
-          id: f._id.toHexString?.() ?? String(f._id),
-          name: f.name,
-          mime: f.mime,
-          sizeBytes: f.sizeBytes,
-          uploaderId: f.uploaderId.toHexString?.() ?? String(f.uploaderId),
-          createdAt: f.createdAt,
-        })),
+        files: await Promise.all(
+          files.map(async (f) => ({
+            id: f._id.toHexString?.() ?? String(f._id),
+            name: f.name,
+            mime: f.mime,
+            sizeBytes: f.sizeBytes,
+            uploaderId: f.uploaderId.toHexString?.() ?? String(f.uploaderId),
+            thumbnailUrl: f.thumbnailKey ? await signDownloadUrl(f.thumbnailKey, 300) : null,
+            createdAt: f.createdAt,
+          }))
+        ),
         parsed,
       };
     },

@@ -100,6 +100,8 @@ export const messageApi = {
 
 export const fileApi = {
   get: (id: string) => api.get<FileDetail>(`/v1/files/${id}`),
+  thumbnail: (id: string) => api.get<{ url: string }>(`/v1/files/${id}/thumbnail`),
+  remove: (id: string) => api.delete<{ ok: true }>(`/v1/files/${id}`),
   initUpload: (body: { workspaceId: string; filename: string; mime: string; size: number; checksum: string; chunkSize?: number }) =>
     api.post<{ uploadId: string; chunkSize: number; totalChunks: number; chunkUrls: { n: number; url: string }[] }>(
       "/v1/uploads",

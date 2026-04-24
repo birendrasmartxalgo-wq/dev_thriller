@@ -61,6 +61,7 @@ export function MediaView({ chatId, onClose }: { chatId: string; onClose?: () =>
           const isImage = m.kind === "image";
           const isVideo = m.kind === "video";
           const label = (m.metadata as { name?: string } | null)?.name ?? (m.url ? new URL(m.url).hostname : m.kind);
+          const thumb = m.thumbnailUrl ?? null;
           return (
             <div
               key={m.id}
@@ -68,7 +69,9 @@ export function MediaView({ chatId, onClose }: { chatId: string; onClose?: () =>
                 aspectRatio: 1,
                 borderRadius: 8,
                 border: "1px solid var(--border-soft)",
-                background: isImage
+                background: thumb
+                  ? `center/cover no-repeat url(${JSON.stringify(thumb)})`
+                  : isImage
                   ? "linear-gradient(135deg, #8B6BF0, #5E3DC7)"
                   : isVideo
                   ? "linear-gradient(135deg, #1E2247, #5E3DC7)"

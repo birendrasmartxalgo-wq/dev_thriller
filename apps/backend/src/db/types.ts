@@ -134,6 +134,7 @@ export interface FileDoc {
   r2Key: string;
   version: number;
   parentFolderId?: ObjectId;
+  thumbnailKey?: string;
   createdAt: Date;
   deletedAt?: Date;
 }

@@ -1,11 +1,19 @@
-# CronJobs for the three maintenance workers.
-# Reuses the backend image — the workers live under apps/workers but depend on @dt/backend.
+# Workers manifests. Three CronJobs (retention, audit-verify, media-extract —
+# one-shot scripts that exit) and one Deployment (thumbnailer — long-running,
+# drains `thumb:jobs` via BRPOP). All four share the dedicated workers image
+# (apps/workers/Dockerfile with ffmpeg preinstalled); the WORKER env var
+# selects the entrypoint inside that image.
+#
+# The `envFrom` reference assumes a `dt-backend-env` Secret with the same keys
+# the backend uses (MONGO_URI, REDIS_URL, R2_*, JWT_* — see
+# apps/backend/src/config/env.ts).
 
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: retention
   namespace: dev-thriller
+  labels: { app: dt-workers, job: retention }
 spec:
   schedule: "0 3 * * *" # 03:00 UTC daily
   concurrencyPolicy: Forbid
@@ -13,61 +21,105 @@ spec:
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
+      backoffLimit: 2
       template:
         spec:
           restartPolicy: OnFailure
           containers:
-            - name: retention
-              image: ghcr.io/YOUR_ORG/dt-backend:latest
-              command: ["bun", "run", "/app/apps/workers/src/retention.ts", "--apply"]
-              envFrom:
-                - secretRef: { name: dt-secrets }
+            - name: worker
+              image: devthriller/workers:latest
+              imagePullPolicy: IfNotPresent
               env:
-                - name: REDIS_URL
-                  value: "redis://dragonfly.dev-thriller.svc.cluster.local:6379"
+                - name: WORKER
+                  value: retention
+              envFrom:
+                - secretRef: { name: dt-backend-env }
+              args: ["sh", "-c", "bun run apps/workers/src/retention.ts --apply"]
 ---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: audit-verify
   namespace: dev-thriller
+  labels: { app: dt-workers, job: audit-verify }
 spec:
   schedule: "0 4 * * *" # 04:00 UTC daily
   concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
   jobTemplate:
     spec:
+      backoffLimit: 1
       template:
         spec:
           restartPolicy: OnFailure
           containers:
-            - name: audit-verify
-              image: ghcr.io/YOUR_ORG/dt-backend:latest
-              command: ["bun", "run", "/app/apps/workers/src/audit-verify.ts"]
-              envFrom:
-                - secretRef: { name: dt-secrets }
+            - name: worker
+              image: devthriller/workers:latest
+              imagePullPolicy: IfNotPresent
               env:
-                - name: REDIS_URL
-                  value: "redis://dragonfly.dev-thriller.svc.cluster.local:6379"
+                - name: WORKER
+                  value: audit-verify
+              envFrom:
+                - secretRef: { name: dt-backend-env }
 ---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: media-extract
   namespace: dev-thriller
+  labels: { app: dt-workers, job: media-extract }
 spec:
   schedule: "15 5 * * *" # 05:15 UTC daily (backfill missing rows)
   concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
   jobTemplate:
     spec:
+      backoffLimit: 1
       template:
         spec:
           restartPolicy: OnFailure
           containers:
-            - name: media-extract
-              image: ghcr.io/YOUR_ORG/dt-backend:latest
-              command: ["bun", "run", "/app/apps/workers/src/media-extract.ts"]
-              envFrom:
-                - secretRef: { name: dt-secrets }
+            - name: worker
+              image: devthriller/workers:latest
+              imagePullPolicy: IfNotPresent
               env:
-                - name: REDIS_URL
-                  value: "redis://dragonfly.dev-thriller.svc.cluster.local:6379"
+                - name: WORKER
+                  value: media-extract
+              envFrom:
+                - secretRef: { name: dt-backend-env }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: thumbnailer
+  namespace: dev-thriller
+  labels: { app: dt-workers, worker: thumbnailer }
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: dt-workers, worker: thumbnailer }
+  template:
+    metadata:
+      labels: { app: dt-workers, worker: thumbnailer }
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: thumbnailer
+          image: devthriller/workers:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: WORKER
+              value: thumbnailer
+          envFrom:
+            - secretRef: { name: dt-backend-env }
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
