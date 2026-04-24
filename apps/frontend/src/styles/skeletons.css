@@ -1,0 +1,101 @@
+/* Skeletons — "case-file tape" motif.
+   Mono strips with angle hatch pattern animated via a keyframe shimmer.
+   Tokens only from colors_and_type.css — no raw hex. */
+
+@keyframes dt-tape-shimmer {
+  0%   { background-position: 0 0; }
+  100% { background-position: 32px 0; }
+}
+
+.sk {
+  /* The evidence-tape diagonal hatch. Two stacked layers:
+     - base tint: paper-100
+     - hatch: stripes of tape-200 and paper-200 at 45deg, 8px band.
+     On top, a soft shimmer gradient sweeps left → right. */
+  position: relative;
+  display: block;
+  border-radius: 4px;
+  background-color: var(--paper-100);
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      color-mix(in oklab, var(--tape-200) 55%, transparent) 0 4px,
+      color-mix(in oklab, var(--paper-200) 60%, transparent) 4px 8px
+    );
+  background-size: 32px 32px;
+  animation: dt-tape-shimmer 1.6s linear infinite;
+  overflow: hidden;
+  color: transparent;
+  user-select: none;
+}
+
+/* A subtle overlay tape stripe so it reads as "redacted" not "loading spinner". */
+.sk::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--paper-0) 50%, transparent) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: dt-tape-sweep 1.6s ease-in-out infinite;
+}
+@keyframes dt-tape-sweep {
+  0%   { transform: translateX(-100%); }
+  60%  { transform: translateX(100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Shapes */
+.sk-line   { height: 10px; border-radius: 3px; }
+.sk-line-sm { height: 8px; border-radius: 3px; }
+.sk-line-lg { height: 14px; border-radius: 3px; }
+.sk-block  { border-radius: 6px; }
+.sk-circle { border-radius: 999px; }
+.sk-chip   { height: 18px; width: 80px; border-radius: 999px; }
+
+/* Host containers — avoid wrapping every skeleton call-site inline. */
+.sk-row {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.sk-card {
+  background: var(--paper-0);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.sk-tile {
+  background: var(--paper-0);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.sk-msg {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 10px;
+  padding: 6px 20px;
+}
+
+/* Respect reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .sk,
+  .sk::before {
+    animation: none !important;
+  }
+}

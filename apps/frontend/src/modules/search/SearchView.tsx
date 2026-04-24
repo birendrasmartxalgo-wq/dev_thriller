@@ -8,6 +8,7 @@ import { useSession } from "@/store/session";
 import { navigate, useLocation } from "@/router";
 import { Icon } from "@/components/Icons";
 import { toast } from "@/store/toast";
+import { RowSkeleton } from "@/components/Skeletons";
 
 type TypeFilter = "all" | "message" | "file";
 
@@ -167,6 +168,14 @@ export function SearchView() {
       )}
 
       <div className="page-body" style={{ display: "grid", gap: 20 }}>
+        {res.isLoading && q.length >= 2 && (
+          <div style={{ display: "grid", gap: 6 }} aria-hidden="true">
+            <RowSkeleton />
+            <RowSkeleton />
+            <RowSkeleton />
+            <RowSkeleton />
+          </div>
+        )}
         {(type === "all" || type === "message") && (
           <div>
             <div className="caseno" style={{ marginBottom: 8 }}>

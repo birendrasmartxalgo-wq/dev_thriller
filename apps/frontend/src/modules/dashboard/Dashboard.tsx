@@ -5,6 +5,7 @@ import { chatApi, workspaceApi } from "@/api/endpoints";
 import { Link } from "@/router";
 import { PresenceDot } from "@/components/PresenceDot";
 import { Icon } from "@/components/Icons";
+import { RowSkeleton } from "@/components/Skeletons";
 
 export function Dashboard() {
   const user = useSession((s) => s.user);
@@ -41,7 +42,7 @@ export function Dashboard() {
           <div className="sub">Welcome back. The chain is intact.</div>
         </div>
       </div>
-      <div className="page-body" style={{ display: "grid", gap: 14, gridTemplateColumns: "1fr 1fr" }}>
+      <div className="page-body dt-dashboard-grid" style={{ display: "grid", gap: 14, gridTemplateColumns: "1fr 1fr" }}>
         <div className="card">
           <div className="card-hd">
             <h3>Your case file</h3>
@@ -65,6 +66,13 @@ export function Dashboard() {
             <div className="caseno">/WORKSPACE</div>
           </div>
           <div style={{ display: "grid", gap: 8 }}>
+            {membersQuery.isLoading && (
+              <>
+                <RowSkeleton />
+                <RowSkeleton />
+                <RowSkeleton />
+              </>
+            )}
             {membersQuery.data?.items.map((m) => (
               <div key={m.userId} style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{ position: "relative" }}>

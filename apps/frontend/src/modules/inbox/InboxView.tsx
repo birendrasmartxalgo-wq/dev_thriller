@@ -4,8 +4,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { notificationApi, type NotificationItem } from "@/api/adminApi";
-import { Icon } from "@/components/Icons";
 import { useSession } from "@/store/session";
+import { RowSkeleton } from "@/components/Skeletons";
 import { tokenStore } from "@/api/client";
 import { navigate } from "@/router";
 
@@ -92,27 +92,43 @@ export function InboxView() {
         </button>
       </div>
 
-      <div className="page-body" style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 20 }}>
-        <aside style={{ display: "grid", gap: 2, alignContent: "start" }}>
+      <div className="page-body dt-rail-body" style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 20 }}>
+        <aside className="dt-settings-rail" style={{ display: "grid", gap: 2, alignContent: "start" }} aria-label="Inbox filters">
           {FILTERS.map(([k, l]) => (
-            <div key={k} className={`sb-item${filter === k ? " active" : ""}`} onClick={() => setFilter(k)}>
+            <button
+              key={k}
+              type="button"
+              className={`sb-item${filter === k ? " active" : ""}`}
+              onClick={() => setFilter(k)}
+              aria-pressed={filter === k}
+              style={{ border: 0, background: "transparent", textAlign: "left", width: "100%" }}
+            >
               <span style={{ flex: 1 }}>{l}</span>
               <span className="count" style={{ fontFamily: "var(--font-mono)" }}>
                 {filterCounts[k] ?? 0}
               </span>
-            </div>
+            </button>
           ))}
         </aside>
 
         <div style={{ display: "grid", gap: 8 }}>
+          {list.isLoading && items.length === 0 && (
+            <div style={{ display: "grid", gap: 8 }} aria-hidden="true">
+              <RowSkeleton />
+              <RowSkeleton />
+              <RowSkeleton />
+            </div>
+          )}
           {items.map((n) => {
             const seen = Boolean(n.readAt);
             const snippet = (n.payload.snippet as string | undefined) ?? "";
             const chatName = (n.payload.chatName as string | undefined) ?? "";
             return (
-              <div
+              <button
                 key={n.id}
+                type="button"
                 onClick={() => openNotif(n)}
+                aria-label={`Open ${n.kind} notification${seen ? "" : " (unread)"}`}
                 style={{
                   display: "grid",
                   gridTemplateColumns: "36px 1fr auto",
@@ -123,6 +139,10 @@ export function InboxView() {
                   background: seen ? "var(--paper-0)" : "var(--ember-50)",
                   cursor: "pointer",
                   borderLeft: seen ? "1px solid var(--border-soft)" : "3px solid var(--ember-500)",
+                  textAlign: "left",
+                  font: "inherit",
+                  color: "inherit",
+                  width: "100%",
                 }}
               >
                 <div
@@ -148,9 +168,9 @@ export function InboxView() {
                 </div>
                 <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
                   <span className="caseno">{new Date(n.createdAt).toLocaleString().toUpperCase()}</span>
-                  {!seen && <span style={{ width: 8, height: 8, borderRadius: 999, background: "var(--ember-500)" }} />}
+                  {!seen && <span style={{ width: 8, height: 8, borderRadius: 999, background: "var(--ember-500)" }} aria-hidden="true" />}
                 </div>
-              </div>
+              </button>
             );
           })}
 

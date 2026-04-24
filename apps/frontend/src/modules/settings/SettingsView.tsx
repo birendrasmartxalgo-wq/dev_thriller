@@ -45,13 +45,26 @@ export function SettingsView() {
           <div className="sub">Workspace admins see all tabs. You're {activeWsData?.role ?? "a member"}.</div>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 0, padding: "16px 0 0" }}>
-        <aside style={{ padding: "0 12px 16px 24px", display: "grid", gap: 2, alignContent: "start" }}>
+      <div className="dt-rail-body" style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 0, padding: "16px 0 0" }}>
+        <aside
+          className="dt-settings-rail"
+          style={{ padding: "0 12px 16px 24px", display: "grid", gap: 2, alignContent: "start" }}
+          aria-label="Settings sections"
+          role="tablist"
+        >
           {TABS.map((t) => (
-            <div key={t.k} className={`sb-item${tab === t.k ? " active" : ""}`} onClick={() => setTab(t.k)}>
+            <button
+              key={t.k}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.k}
+              className={`sb-item${tab === t.k ? " active" : ""}`}
+              onClick={() => setTab(t.k)}
+              style={{ border: 0, background: "transparent", textAlign: "left", width: "100%" }}
+            >
               <IconOf name={t.ic} />
               <span>{t.l}</span>
-            </div>
+            </button>
           ))}
         </aside>
 
@@ -60,6 +73,7 @@ export function SettingsView() {
           {tab === "notifications" && user && <NotificationsTab />}
           {tab === "security" && <SecurityTab />}
           {tab === "workspace" && activeWsData && <WorkspaceTab />}
+
           {tab === "billing" && (
             <div className="card">
               <div className="card-hd">

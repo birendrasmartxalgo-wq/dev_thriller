@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { Icon } from "@/components/Icons";
+import { useFocusTrap } from "@/lib/focusTrap";
 
 const GROUPS: { title: string; items: [string[], string][] }[] = [
   {
@@ -49,15 +50,25 @@ export function Shortcuts({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  const trapRef = useFocusTrap<HTMLDivElement>(true, onClose);
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 720 }}>
+      <div
+        ref={trapRef}
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Keyboard shortcuts"
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: 720 }}
+      >
         <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--border-soft)", display: "flex", alignItems: "center", gap: 10 }}>
           <div className="caseno">CASE · COMMAND REFERENCE</div>
           <div style={{ flex: 1 }} />
           <kbd>esc</kbd>
-          <button className="tb-btn" onClick={onClose}>
-            <Icon.x size={14} />
+          <button type="button" className="tb-btn" aria-label="Close" onClick={onClose}>
+            <Icon.x size={14} aria-hidden="true" />
           </button>
         </div>
         <div style={{ padding: "10px 22px 22px" }}>

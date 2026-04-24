@@ -1,0 +1,76 @@
+/* Global a11y utilities. Never edit colors_and_type.css. */
+
+/* Visually hidden but accessible to screen readers. */
+.dt-sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* Skip-to-content link. Visually hidden until focused. */
+.dt-skip-link {
+  position: fixed;
+  top: -40px;
+  left: 8px;
+  z-index: 999;
+  background: var(--ember-500);
+  color: var(--paper-0);
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  font: 600 13px/1 var(--font-sans);
+  text-decoration: none;
+  transition: top 140ms var(--ease-out);
+  box-shadow: var(--sh-2);
+}
+.dt-skip-link:focus,
+.dt-skip-link:focus-visible {
+  top: 8px;
+  outline: none;
+  box-shadow: var(--sh-focus);
+}
+
+/* Focus ring — ensure every focus-visible element has a visible ring even if
+   the component overrides `outline:none`. */
+:where(button, a, input, select, textarea, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--ember-500);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* Make sure modal overlays have a high-contrast focus ring even on dark backdrop. */
+.modal :focus-visible {
+  outline: 2px solid var(--tape-500);
+  outline-offset: 2px;
+}
+
+/* Interactive rows that carry role/tabindex should still show cursor. */
+[role="button"][tabindex], [tabindex="0"] {
+  cursor: pointer;
+}
+
+/* Forbid zero-size focus outlines in future: use @layer-style gentle nudge.
+   (Doesn't block; just prevents accidental outline:none without replacement.) */
+
+/* High-contrast boost for :focus inside chips / pill buttons. */
+.seg button:focus-visible,
+.chip button:focus-visible {
+  box-shadow: var(--sh-focus);
+  border-radius: var(--r-sm);
+}
+
+/* Respect reduced motion globally for custom animations. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

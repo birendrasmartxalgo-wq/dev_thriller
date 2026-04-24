@@ -25,6 +25,7 @@ import { PresenceDot } from "@/components/PresenceDot";
 import { MediaView } from "@/modules/chat/MediaView";
 import { MentionPopover, getMentionContext, applyMention, type MentionState } from "@/modules/chat/MentionPopover";
 import { ChatSettingsDialog } from "@/modules/chat/ChatSettingsDialog";
+import { MessageSkeleton } from "@/components/Skeletons";
 
 const PAGE = 50;
 const REPLAY_CURSOR_KEY = (chatId: string) => `dt.replay.${chatId}`;
@@ -600,9 +601,9 @@ export function ChatView() {
   }
 
   return (
-    <div style={{ flex: 1, display: "grid", gridTemplateColumns: openThreadFor ? "1fr 360px" : showMedia ? "1fr 340px" : "1fr", minWidth: 0 }}>
+    <div className="dt-chat-split" style={{ flex: 1, display: "grid", gridTemplateColumns: openThreadFor ? "1fr 360px" : showMedia ? "1fr 340px" : "1fr", minWidth: 0 }}>
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0, background: "var(--bg)" }}>
-        <div style={{ padding: "10px 20px", borderBottom: "1px solid var(--border-soft)", display: "flex", alignItems: "center", gap: 12, background: "var(--paper-0)" }}>
+        <div className="dt-chat-header" style={{ padding: "10px 20px", borderBottom: "1px solid var(--border-soft)", display: "flex", alignItems: "center", gap: 12, background: "var(--paper-0)" }}>
           <div style={{ font: "700 15px/1 var(--font-sans)", display: "flex", alignItems: "center", gap: 6 }}>
             {chat?.type === "dm" ? <Icon.user size={16} /> : <Icon.hash size={16} />}
             {chat?.name}
@@ -615,7 +616,14 @@ export function ChatView() {
           )}
 
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-            <input type="date" value={jumpAt} onChange={(e) => setJumpAt(e.target.value)} className="input" style={{ width: 150, padding: "4px 8px", fontSize: 12 }} />
+            <input
+              type="date"
+              aria-label="Jump to date"
+              value={jumpAt}
+              onChange={(e) => setJumpAt(e.target.value)}
+              className="input"
+              style={{ width: 150, padding: "4px 8px", fontSize: 12 }}
+            />
             <button className="btn btn-ghost" style={{ padding: "4px 8px" }} onClick={jumpToDate} disabled={!jumpAt}>
               Jump
             </button>
@@ -679,6 +687,13 @@ export function ChatView() {
         )}
 
         <div style={{ flex: 1, minHeight: 0 }}>
+          {chatQuery.isLoading && messages.length === 0 && (
+            <div style={{ padding: "14px 0" }} aria-hidden="true">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <MessageSkeleton key={i} bodyLines={(i % 2) + 1} />
+              ))}
+            </div>
+          )}
           <Virtuoso
             ref={virtuoso}
             data={messages}
@@ -713,7 +728,9 @@ export function ChatView() {
                 <span key={fid} className="chip">
                   <Icon.paperclip size={10} /> {fid.slice(-6)}
                   <button
+                    type="button"
                     className="tb-btn"
+                    aria-label="Remove attachment"
                     style={{ width: 18, height: 18, padding: 0, marginLeft: 4 }}
                     onClick={() => setPendingAttachments((prev) => prev.filter((x) => x !== fid))}
                   >
@@ -727,6 +744,7 @@ export function ChatView() {
             <textarea
               ref={composerRef}
               value={draft}
+              aria-label="Message draft"
               onChange={(e) => {
                 setDraft(e.target.value);
                 // Defer to next tick so selectionStart reflects the new value.
@@ -758,15 +776,16 @@ export function ChatView() {
                 boxSizing: "border-box",
               }}
             />
-            <input ref={fileInput} type="file" multiple hidden onChange={(e) => onPickFiles(e.target.files)} />
-            <div style={{ display: "flex", alignItems: "center", gap: 2, padding: "4px 6px", borderTop: "1px solid var(--border-soft)" }}>
-              <button type="button" className="tb-btn" onClick={() => fileInput.current?.click()} title="Attach file">
+            <input ref={fileInput} type="file" multiple hidden aria-label="Attach files" onChange={(e) => onPickFiles(e.target.files)} />
+            <div className="dt-composer-toolbar" style={{ display: "flex", alignItems: "center", gap: 2, padding: "4px 6px", borderTop: "1px solid var(--border-soft)" }}>
+              <button type="button" className="tb-btn" onClick={() => fileInput.current?.click()} title="Attach file" aria-label="Attach file">
                 <Icon.paperclip size={14} />
               </button>
               <button
                 type="button"
                 className="tb-btn"
                 title="Mention"
+                aria-label="Mention someone"
                 onClick={() => {
                   const el = composerRef.current;
                   if (!el) return;
@@ -783,7 +802,7 @@ export function ChatView() {
                 <Icon.at size={14} />
               </button>
               <div style={{ flex: 1 }} />
-              <button type="submit" className="btn btn-primary" style={{ padding: "5px 10px" }} disabled={sending || !draft.trim()}>
+              <button type="submit" className="btn btn-primary" style={{ padding: "5px 10px" }} disabled={sending || !draft.trim()} aria-label="Send message">
                 <Icon.send size={14} /> Send
               </button>
             </div>
@@ -806,7 +825,7 @@ export function ChatView() {
             <strong style={{ fontSize: 13 }}>Thread</strong>
             <span className="caseno">{threadReplies.length} REPLIES</span>
             <div style={{ flex: 1 }} />
-            <button className="tb-btn" onClick={() => setOpenThreadFor(null)}>
+            <button type="button" className="tb-btn" aria-label="Close thread" onClick={() => setOpenThreadFor(null)}>
               <Icon.x size={14} />
             </button>
           </div>
@@ -880,7 +899,8 @@ function ThreadComposer({ chatId, parentId, onSent }: { chatId: string; parentId
   }
   return (
     <form onSubmit={submit} style={{ padding: 10, borderTop: "1px solid var(--border-soft)" }}>
-      <input className="input" placeholder="Reply to thread" value={text} onChange={(e) => setText(e.target.value)} />
+      <label className="dt-sr-only" htmlFor="dt-thread-reply">Reply to thread</label>
+      <input id="dt-thread-reply" className="input" placeholder="Reply to thread" value={text} onChange={(e) => setText(e.target.value)} />
     </form>
   );
 }
