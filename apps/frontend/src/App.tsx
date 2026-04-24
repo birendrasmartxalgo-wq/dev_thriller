@@ -13,6 +13,7 @@ import { AdminView } from "@/modules/admin/AdminView";
 import { Onboarding } from "@/modules/onboarding/Onboarding";
 import { ToastRegion } from "@/components/Toasts";
 import { GlobalOverlays } from "@/components/GlobalOverlays";
+import { ErrorBoundary, NarrowFallback, ShellFallback } from "@/components/ErrorBoundary";
 import { useSession } from "@/store/session";
 import { authApi } from "@/api/endpoints";
 import { tokenStore } from "@/api/client";
@@ -51,6 +52,15 @@ function RedirectIfAuthed({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Narrow fallback for auth screens (no shell mounted).
+const narrowFallback = (error: Error, reset: () => void) => (
+  <NarrowFallback error={error} reset={reset} />
+);
+// Shell fallback — content slot only; Shell itself stays up so the user can navigate.
+const shellFallback = (error: Error, reset: () => void) => (
+  <ShellFallback error={error} reset={reset} />
+);
+
 export function App() {
   useGlobalLinkIntercept();
   const setUser = useSession((s) => s.setUser);
@@ -77,9 +87,12 @@ export function App() {
     };
   }, [setUser, setBooted]);
 
+  // Wrap the content slot (not the Shell chrome) — one crashed view shouldn't kill the topbar/sidebar.
   const inShell = (el: React.ReactNode) => (
     <RequireAuth>
-      <Shell>{el}</Shell>
+      <Shell>
+        <ErrorBoundary fallback={shellFallback}>{el}</ErrorBoundary>
+      </Shell>
     </RequireAuth>
   );
 
@@ -96,24 +109,30 @@ export function App() {
           {
             path: "/login",
             element: () => (
-              <RedirectIfAuthed>
-                <LoginScreen />
-              </RedirectIfAuthed>
+              <ErrorBoundary fallback={narrowFallback}>
+                <RedirectIfAuthed>
+                  <LoginScreen />
+                </RedirectIfAuthed>
+              </ErrorBoundary>
             ),
           },
           {
             path: "/signup",
             element: () => (
-              <RedirectIfAuthed>
-                <SignupScreen />
-              </RedirectIfAuthed>
+              <ErrorBoundary fallback={narrowFallback}>
+                <RedirectIfAuthed>
+                  <SignupScreen />
+                </RedirectIfAuthed>
+              </ErrorBoundary>
             ),
           },
           {
             path: "/onboarding",
             element: () => (
               <RequireAuth>
-                <Onboarding />
+                <ErrorBoundary fallback={narrowFallback}>
+                  <Onboarding />
+                </ErrorBoundary>
               </RequireAuth>
             ),
           },

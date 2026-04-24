@@ -76,13 +76,26 @@ export function SettingsView() {
           </div>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 0, padding: "16px 0 0" }}>
-        <aside style={{ padding: "0 12px 16px 24px", display: "grid", gap: 2, alignContent: "start" }}>
+      <div className="dt-rail-body" style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 0, padding: "16px 0 0" }}>
+        <aside
+          className="dt-settings-rail"
+          style={{ padding: "0 12px 16px 24px", display: "grid", gap: 2, alignContent: "start" }}
+          aria-label="Settings sections"
+          role="tablist"
+        >
           {TABS.map((t) => (
-            <div key={t.k} className={`sb-item${tab === t.k ? " active" : ""}`} onClick={() => setTab(t.k)}>
+            <button
+              key={t.k}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.k}
+              className={`sb-item${tab === t.k ? " active" : ""}`}
+              onClick={() => setTab(t.k)}
+              style={{ border: 0, background: "transparent", textAlign: "left", width: "100%" }}
+            >
               <IconAt name={t.ic} />
               <span>{t.l}</span>
-            </div>
+            </button>
           ))}
         </aside>
 
@@ -199,8 +212,22 @@ export function SettingsView() {
                   </span>
                 </div>
                 <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-                  <input className="input" placeholder="Invite by email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} style={{ flex: 1 }} />
-                  <select className="input" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as InviteRole)} style={{ width: 120 }}>
+                  <input
+                    className="input"
+                    aria-label="Invite email"
+                    type="email"
+                    placeholder="Invite by email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    style={{ flex: 1 }}
+                  />
+                  <select
+                    className="input"
+                    aria-label="Invite role"
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value as InviteRole)}
+                    style={{ width: 120 }}
+                  >
                     <option value="member">Member</option>
                     <option value="admin">Admin</option>
                     <option value="guest">Guest</option>
@@ -229,6 +256,7 @@ export function SettingsView() {
                         <td style={{ padding: "8px 0", borderTop: "1px solid var(--border-soft)" }}>
                           <select
                             className="input"
+                            aria-label={`Role for ${m.name ?? m.email}`}
                             style={{ padding: "3px 8px", width: 100 }}
                             defaultValue={m.role}
                             onChange={(e) => changeRole.mutate({ uid: m.userId, role: e.target.value as Role })}

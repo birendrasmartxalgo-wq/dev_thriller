@@ -8,6 +8,7 @@ import { chatApi, searchApi } from "@/api/endpoints";
 import { useSession } from "@/store/session";
 import { Icon } from "@/components/Icons";
 import { navigate } from "@/router";
+import { useFocusTrap } from "@/lib/focusTrap";
 
 type Item = {
   id: string;
@@ -144,13 +145,24 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
   let flatIdx = -1;
 
+  const trapRef = useFocusTrap<HTMLDivElement>(true, onClose);
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 640, marginTop: "-10vh" }}>
+      <div
+        ref={trapRef}
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: 640, marginTop: "-10vh" }}
+      >
         <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border-soft)", display: "flex", alignItems: "center", gap: 10 }}>
           <Icon.search size={16} />
           <input
             autoFocus
+            aria-label="Search palette"
             placeholder="Search files, chats, people, actions…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -168,13 +180,15 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                 flatIdx++;
                 const active = flatIdx === sel;
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={it.id}
                     onClick={() => {
                       it.run();
                       onClose();
                     }}
                     onMouseEnter={() => setSel(filtered.indexOf(it))}
+                    aria-label={`${it.group}: ${it.name}`}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -184,6 +198,10 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                       cursor: "pointer",
                       background: active ? "var(--ember-50)" : "transparent",
                       color: active ? "var(--ember-700)" : "var(--fg1)",
+                      border: 0,
+                      width: "100%",
+                      textAlign: "left",
+                      font: "inherit",
                     }}
                   >
                     <div
@@ -209,7 +227,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                       <div style={{ font: "400 11px/1 var(--font-mono)", color: active ? "var(--ember-700)" : "var(--fg3)", marginTop: 3 }}>{it.sub}</div>
                     </div>
                     {active && <span style={{ font: "500 10px/1 var(--font-mono)", color: "var(--fg3)" }}>↵ open</span>}
-                  </div>
+                  </button>
                 );
               })}
             </div>

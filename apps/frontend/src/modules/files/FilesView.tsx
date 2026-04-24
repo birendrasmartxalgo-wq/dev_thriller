@@ -10,6 +10,7 @@ import { useSession } from "@/store/session";
 import { useUploads, formatBytes } from "@/lib/upload";
 import { Icon } from "@/components/Icons";
 import { toast } from "@/store/toast";
+import { TableRowSkeleton } from "@/components/Skeletons";
 
 type FilterKey = "all" | "uploading" | "locked";
 
@@ -102,7 +103,14 @@ export function FilesView() {
             </span>
           </h1>
         </div>
-        <input className="input" placeholder="Search files…" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 220 }} />
+        <input
+          className="input"
+          aria-label="Search files"
+          placeholder="Search files…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          style={{ width: 220 }}
+        />
         <div className="seg">
           {(
             [
@@ -122,7 +130,7 @@ export function FilesView() {
         </button>
       </div>
 
-      <div style={{ flex: 1, display: "grid", gridTemplateColumns: selectedId ? "1fr 360px" : "1fr", minHeight: 0 }}>
+      <div className="dt-files-split" style={{ flex: 1, display: "grid", gridTemplateColumns: selectedId ? "1fr 360px" : "1fr", minHeight: 0 }}>
         <div style={{ overflow: "auto", padding: "12px 24px 24px" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", font: "400 13px/1.3 var(--font-sans)" }}>
             <thead>
@@ -146,10 +154,27 @@ export function FilesView() {
               </tr>
             </thead>
             <tbody>
+              {filesQuery.isLoading && allRows.length === 0 && (
+                <>
+                  <TableRowSkeleton />
+                  <TableRowSkeleton />
+                  <TableRowSkeleton />
+                  <TableRowSkeleton />
+                </>
+              )}
               {allRows.map((r) => (
                 <tr
                   key={r.key}
                   onClick={() => r.id && setSelectedId(r.id)}
+                  onKeyDown={(e) => {
+                    if (!r.id) return;
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedId(r.id);
+                    }
+                  }}
+                  tabIndex={r.id ? 0 : -1}
+                  aria-selected={selectedId === r.id}
                   style={{ cursor: r.id ? "pointer" : "default", background: selectedId === r.id ? "var(--ember-50)" : "transparent" }}
                 >
                   <td style={{ padding: 10, borderBottom: "1px solid var(--border-soft)" }}>
@@ -223,11 +248,15 @@ export function FilesView() {
         </div>
 
         {selectedId && detailQuery.data && (
-          <div style={{ borderLeft: "1px solid var(--border-soft)", background: "var(--paper-0)", padding: 16, overflow: "auto" }}>
+          <aside
+            className="dt-files-detail"
+            aria-label="File details"
+            style={{ borderLeft: "1px solid var(--border-soft)", background: "var(--paper-0)", padding: 16, overflow: "auto" }}
+          >
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <strong>File details</strong>
               <div style={{ flex: 1 }} />
-              <button className="tb-btn" onClick={() => setSelectedId(null)}>
+              <button type="button" className="tb-btn" aria-label="Close file details" onClick={() => setSelectedId(null)}>
                 <Icon.x size={14} />
               </button>
             </div>
@@ -287,7 +316,9 @@ export function FilesView() {
                 <Icon.download size={14} /> Download
               </a>
               <button
+                type="button"
                 className="btn btn-secondary"
+                aria-label="Copy signed URL"
                 onClick={() => {
                   void navigator.clipboard.writeText(detailQuery.data!.url);
                   toast("Signed URL copied (valid 15 min)");
@@ -296,7 +327,7 @@ export function FilesView() {
                 <Icon.link size={14} />
               </button>
             </div>
-          </div>
+          </aside>
         )}
       </div>
     </div>

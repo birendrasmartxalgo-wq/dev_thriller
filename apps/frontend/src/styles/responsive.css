@@ -1,0 +1,180 @@
+/* Responsive overrides. The base grid in app.css assumes desktop.
+   We layer narrower breakpoints on top here. Never edit colors_and_type.css. */
+
+/* ----- Shell: collapse sidebar below 900px into a drawer. */
+@media (max-width: 900px) {
+  .app {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 44px 1fr;
+  }
+  .sidebar {
+    position: fixed;
+    top: 44px;
+    left: 0;
+    bottom: 0;
+    width: 280px;
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform 200ms var(--ease-out, ease-out);
+    box-shadow: var(--sh-3);
+    background: var(--paper-50);
+  }
+  .sidebar[data-open="true"] {
+    transform: translateX(0);
+  }
+  .main {
+    grid-column: 1 !important;
+  }
+  .tb-logo span {
+    display: none; /* save space */
+  }
+  .tb-case .caseno {
+    display: none;
+  }
+  .tb-search {
+    max-width: none;
+    margin: 0 6px;
+  }
+}
+
+/* Drawer backdrop — mounted only when drawer open. */
+.dt-drawer-backdrop {
+  position: fixed;
+  inset: 44px 0 0 0;
+  background: rgba(14, 17, 48, 0.35);
+  z-index: 55;
+  animation: dt-drawer-fade 160ms ease-out;
+}
+@keyframes dt-drawer-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Hamburger button: only visible below 900px. */
+.dt-hamburger {
+  display: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--fg2);
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-right: 4px;
+}
+@media (max-width: 900px) {
+  .dt-hamburger {
+    display: inline-flex;
+  }
+}
+
+/* ----- Tablet tweaks. */
+@media (max-width: 1024px) {
+  .page-head {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 14px 16px 12px;
+  }
+  .page-body {
+    padding: 16px;
+  }
+}
+
+/* ----- Mobile tweaks. */
+@media (max-width: 640px) {
+  .page-head {
+    padding: 12px 14px 10px;
+  }
+  .page-body {
+    padding: 14px;
+  }
+  /* Dashboard two-column cards → single column. */
+  .dt-dashboard-grid {
+    grid-template-columns: 1fr !important;
+  }
+  /* Inbox / Settings rail + body → stack. */
+  .dt-rail-body {
+    grid-template-columns: 1fr !important;
+  }
+  /* Settings vertical rail becomes a horizontal scrolling chip strip. */
+  .dt-settings-rail {
+    display: flex !important;
+    overflow-x: auto;
+    padding: 0 14px 10px !important;
+    gap: 6px !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  .dt-settings-rail .sb-item {
+    flex: 0 0 auto;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: var(--paper-100);
+  }
+  .dt-settings-rail .sb-item.active {
+    background: var(--ember-50);
+    color: var(--ember-700);
+  }
+
+  /* Chat composer — stack controls ergonomically. */
+  .dt-composer-toolbar {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* Chat header — allow wrapping. */
+  .dt-chat-header {
+    flex-wrap: wrap;
+  }
+
+  /* Auth screens — single column. */
+  .dt-auth-split {
+    grid-template-columns: 1fr !important;
+  }
+  .dt-auth-side {
+    display: none !important;
+  }
+}
+
+/* ----- Files gallery: grid columns breakpoint. */
+.dt-files-gallery {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (max-width: 1280px) {
+  .dt-files-gallery { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .dt-files-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Chat open thread/media split — stack on narrow viewports. */
+@media (max-width: 900px) {
+  .dt-chat-split {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Files table / rail split — collapse detail on narrow viewports. */
+@media (max-width: 900px) {
+  .dt-files-split {
+    grid-template-columns: 1fr !important;
+  }
+  .dt-files-detail {
+    border-left: 0 !important;
+    border-top: 1px solid var(--border-soft);
+  }
+}
+
+/* Topbar condenses avatar/logout in DT. */
+@media (max-width: 480px) {
+  .tb-case span:not(.caseno) {
+    max-width: 120px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}

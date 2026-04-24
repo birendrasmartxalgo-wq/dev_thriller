@@ -30,7 +30,7 @@ export function SignupScreen() {
   }
 
   return (
-    <div style={{ height: "100vh", display: "grid", gridTemplateColumns: "1fr 1fr", background: "var(--bg)" }}>
+    <div className="dt-auth-split" style={{ height: "100vh", display: "grid", gridTemplateColumns: "1fr 1fr", background: "var(--bg)" }}>
       <div
         style={{
           padding: 60,
@@ -114,6 +114,7 @@ export function SignupScreen() {
       </div>
 
       <div
+        className="dt-auth-side"
         style={{
           background: "var(--ink-900)",
           color: "#FFFDF8",

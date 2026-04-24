@@ -2,7 +2,11 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./App";
+import { attachQueryClient } from "./components/ErrorBoundary";
 import "./styles/globals.css";
+import "./styles/skeletons.css";
+import "./styles/a11y.css";
+import "./styles/responsive.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -13,6 +17,9 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Let ErrorBoundary fallbacks reach into the query cache without importing this module.
+attachQueryClient(queryClient);
 
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("root element missing");
