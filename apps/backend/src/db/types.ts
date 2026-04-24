@@ -78,6 +78,7 @@ export interface ChatDoc {
   lastMessageAt?: Date;
   createdAt: Date;
   archivedAt?: Date;
+  deletedAt?: Date;
 }
 
 export interface MessageAttachment {
@@ -98,6 +99,8 @@ export interface MessageDoc {
   mentions?: ObjectId[];
   attachments?: MessageAttachment[];
   reactions?: Record<string, ObjectId[]>; // emoji -> [userIds]
+  pinnedBy?: ObjectId;
+  pinnedAt?: Date;
   createdAt: Date;
   editedAt?: Date;
   deletedAt?: Date;

@@ -2,25 +2,32 @@
 //
 // - Virtualized message list via react-virtuoso (target: 5k messages, <200ms keypress-to-paint).
 // - Infinite scroll upward via cursor pagination (`direction=before`).
-// - Live WebSocket updates for created/updated/deleted/reacted.
-// - Mention highlight (@name → ember-50 chip), attachment chips with signed download.
+// - Live WebSocket updates for created/updated/deleted/reacted, plus offline replay on reconnect.
+// - Mention highlight (@name → ember-50 chip), mention autocomplete popover in composer.
+// - Attachment chips with signed download.
 // - Thread panel opens right rail on click; media panel toggles from header.
-// - Jump-to-date via /v1/chats/:id/jump?at=YYYY-MM-DD.
+// - Pinned strip under header; jump-to-message via `?m=<id>` query param.
+// - Chat settings dialog (rename / topic / archive / delete) via header gear.
+// - Presence dots on avatars everywhere we show them.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { useParams } from "@/router";
+import { useParams, useLocation, navigate } from "@/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { chatApi, fileApi, messageApi, workspaceApi } from "@/api/endpoints";
 import { tokenStore } from "@/api/client";
-import type { MessagePublic } from "@/api/types";
+import type { ChatDetail, MessagePublic, PinnedMessage, PresenceStatus, WorkspaceMember } from "@/api/types";
 import { useSession } from "@/store/session";
 import { useUploads, formatBytes } from "@/lib/upload";
 import { toast } from "@/store/toast";
 import { Icon } from "@/components/Icons";
+import { PresenceDot } from "@/components/PresenceDot";
 import { MediaView } from "@/modules/chat/MediaView";
+import { MentionPopover, getMentionContext, applyMention, type MentionState } from "@/modules/chat/MentionPopover";
+import { ChatSettingsDialog } from "@/modules/chat/ChatSettingsDialog";
 
 const PAGE = 50;
+const REPLAY_CURSOR_KEY = (chatId: string) => `dt.replay.${chatId}`;
 
 function renderBodyWithMentions(body: string, memberMap: Map<string, string>) {
   // Split on @id (hex) and @name tokens — render any capture as a chip.
@@ -40,8 +47,14 @@ function renderBodyWithMentions(body: string, memberMap: Map<string, string>) {
   });
 }
 
+function getJumpMessageId(): string | null {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("m");
+}
+
 export function ChatView() {
   const params = useParams();
+  const loc = useLocation();
   const chatId = params.id!;
   const user = useSession((s) => s.user);
   const activeWs = useSession((s) => s.activeWorkspaceId);
@@ -55,8 +68,15 @@ export function ChatView() {
   const [showMedia, setShowMedia] = useState(false);
   const [jumpAt, setJumpAt] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<string[]>([]);
+  const [mentionState, setMentionState] = useState<MentionState>({ open: false, prefix: "", start: -1, end: 0 });
+  const [pinned, setPinned] = useState<PinnedMessage[]>([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [presence, setPresence] = useState<Record<string, PresenceStatus>>({});
   const virtuoso = useRef<VirtuosoHandle>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const qc = useQueryClient();
 
   const chatQuery = useQuery({
@@ -71,6 +91,26 @@ export function ChatView() {
     enabled: Boolean(activeWs),
     staleTime: 60_000,
   });
+
+  // Poll presence every 30s while the view is mounted.
+  useEffect(() => {
+    if (!activeWs) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const p = await workspaceApi.presence(activeWs);
+        if (!cancelled) setPresence(p);
+      } catch {
+        /* ignore */
+      }
+    };
+    void tick();
+    const t = window.setInterval(tick, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(t);
+    };
+  }, [activeWs]);
 
   const memberById = useMemo(() => {
     const m = new Map<string, { name: string; color: string; initials: string }>();
@@ -101,6 +141,9 @@ export function ChatView() {
       setMessages(page.items);
       setNextCursor(page.nextCursor);
       setHasMore(page.hasMore);
+      // Remember the latest createdAt as the replay cursor.
+      const last = page.items[page.items.length - 1];
+      if (last) sessionStorage.setItem(REPLAY_CURSOR_KEY(chatId), last.createdAt);
       // Scroll to bottom.
       setTimeout(() => virtuoso.current?.scrollToIndex({ index: page.items.length - 1, align: "end" }), 40);
     })();
@@ -109,26 +152,52 @@ export function ChatView() {
     };
   }, [chatId]);
 
-  // WebSocket: subscribe to this chat topic.
+  // Pinned strip.
+  const pinnedQuery = useQuery({
+    queryKey: ["chat-pinned", chatId],
+    queryFn: () => chatApi.pinned(chatId),
+    enabled: Boolean(chatId),
+    staleTime: 30_000,
+  });
+  useEffect(() => {
+    if (pinnedQuery.data) setPinned(pinnedQuery.data.items);
+  }, [pinnedQuery.data]);
+
+  // WebSocket: subscribe to this chat topic, request replay on open.
   useEffect(() => {
     if (!chatId) return;
     const access = tokenStore.access;
     if (!access) return;
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(`${proto}//${window.location.host}/v1/ws?token=${encodeURIComponent(access)}`);
+    wsRef.current = ws;
     let closed = false;
-    ws.addEventListener("open", () => ws.send(JSON.stringify({ type: "subscribe", topic: `chat:${chatId}` })));
+    ws.addEventListener("open", () => {
+      ws.send(JSON.stringify({ type: "subscribe", topic: `chat:${chatId}` }));
+      // Offline replay: ask the server for anything newer than our last known cursor.
+      const since = sessionStorage.getItem(REPLAY_CURSOR_KEY(chatId));
+      if (since) ws.send(JSON.stringify({ type: "replay", chat: chatId, since }));
+    });
     ws.addEventListener("message", (ev) => {
       try {
         const p = JSON.parse(String(ev.data));
-        if (p?.type === "message.created" && p.message?.chatId === chatId) {
+        if ((p?.type === "message.created" || p?.type === "msg:new") && p.message?.chatId === chatId) {
           setMessages((prev) => (prev.some((m) => m.id === p.message.id) ? prev : [...prev, p.message]));
+          if (p.message.createdAt) sessionStorage.setItem(REPLAY_CURSOR_KEY(chatId), p.message.createdAt);
         } else if (p?.type === "message.updated" && p.message?.chatId === chatId) {
           setMessages((prev) => prev.map((m) => (m.id === p.message.id ? p.message : m)));
         } else if (p?.type === "message.deleted") {
           setMessages((prev) => prev.filter((m) => m.id !== p.id));
         } else if (p?.type === "message.reacted" && p.message?.chatId === chatId) {
           setMessages((prev) => prev.map((m) => (m.id === p.message.id ? p.message : m)));
+        } else if ((p?.type === "message.pinned" || p?.type === "message.unpinned") && p.message?.chatId === chatId) {
+          setMessages((prev) => prev.map((m) => (m.id === p.message.id ? p.message : m)));
+          void qc.invalidateQueries({ queryKey: ["chat-pinned", chatId] });
+        } else if (p?.type === "chat.updated" && p.id === chatId) {
+          void qc.invalidateQueries({ queryKey: ["chat", chatId] });
+        } else if (p?.type === "chat.deleted" && p.id === chatId) {
+          toast("This chat was deleted");
+          navigate("/");
         }
       } catch {
         /* ignore */
@@ -137,10 +206,23 @@ export function ChatView() {
     ws.addEventListener("close", () => {
       closed = true;
     });
+
+    // Heartbeat + idle ping.
+    const heartbeat = window.setInterval(() => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      if (document.visibilityState === "hidden") {
+        ws.send(JSON.stringify({ type: "idle" }));
+      } else {
+        ws.send(JSON.stringify({ type: "ping" }));
+      }
+    }, 30_000);
+
     return () => {
+      window.clearInterval(heartbeat);
       if (!closed) ws.close();
+      wsRef.current = null;
     };
-  }, [chatId]);
+  }, [chatId, qc]);
 
   async function loadMore() {
     if (!hasMore || !nextCursor) return;
@@ -160,6 +242,7 @@ export function ChatView() {
       setDraft("");
       setPendingAttachments([]);
       setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+      sessionStorage.setItem(REPLAY_CURSOR_KEY(chatId), m.createdAt);
       setTimeout(() => virtuoso.current?.scrollToIndex({ index: messages.length, align: "end" }), 30);
     },
     onError: (e) => toast((e as Error).message, "error"),
@@ -170,6 +253,7 @@ export function ChatView() {
     e.preventDefault();
     const body = draft.trim();
     if (!body || sending) return;
+    if (mentionState.open) return; // let the popover handle Enter
     setSending(true);
     sendMutation.mutate(body);
   }
@@ -182,19 +266,81 @@ export function ChatView() {
     mutationFn: ({ id, emoji, action }: { id: string; emoji: string; action: "add" | "remove" }) => messageApi.react(id, { emoji, action }),
     onError: (e) => toast((e as Error).message, "error"),
   });
+  const pinMut = useMutation({
+    mutationFn: ({ id, pinned: doPin }: { id: string; pinned: boolean }) =>
+      doPin ? messageApi.pin(id) : messageApi.unpin(id),
+    onError: (e) => toast((e as Error).message, "error"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-pinned", chatId] }),
+  });
+
+  const jumpToCursor = useCallback(
+    async (cursor: string, messageId?: string) => {
+      const page = await messageApi.page(chatId, { cursor, direction: "after", limit: PAGE });
+      // The cursor points to the message itself when direction=after & createdAt matches exactly.
+      // Server's jump returns an encoded cursor for the first message >= target, so fetch around it.
+      const beforePage = await messageApi.page(chatId, { cursor, direction: "before", limit: PAGE / 2 });
+      const combined = [...beforePage.items, ...page.items];
+      // Dedupe by id preserving order.
+      const byId = new Set<string>();
+      const items: MessagePublic[] = [];
+      for (const m of combined) {
+        if (byId.has(m.id)) continue;
+        byId.add(m.id);
+        items.push(m);
+      }
+      setMessages(items);
+      setNextCursor(page.nextCursor);
+      setHasMore(page.hasMore);
+      if (messageId) {
+        const idx = items.findIndex((m) => m.id === messageId);
+        if (idx >= 0) {
+          setTimeout(() => virtuoso.current?.scrollToIndex({ index: idx, align: "center" }), 40);
+          setHighlightId(messageId);
+          setTimeout(() => setHighlightId((cur) => (cur === messageId ? null : cur)), 2000);
+        }
+      } else {
+        setTimeout(() => virtuoso.current?.scrollToIndex({ index: 0, align: "start" }), 30);
+      }
+    },
+    [chatId]
+  );
+
+  // React to ?m=<messageId> in the URL — jump and highlight.
+  useEffect(() => {
+    const mid = getJumpMessageId();
+    if (!mid || !chatId) return;
+    (async () => {
+      try {
+        const r = await chatApi.jump(chatId, { messageId: mid });
+        if (!r.cursor) return;
+        await jumpToCursor(r.cursor, mid);
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [chatId, loc, jumpToCursor]);
 
   async function jumpToDate() {
     if (!jumpAt) return;
-    const r = await chatApi.jump(chatId, new Date(jumpAt).toISOString());
+    const r = await chatApi.jump(chatId, { at: new Date(jumpAt).toISOString() });
     if (!r.cursor) {
       toast("No messages at that date", "error");
       return;
     }
-    const page = await messageApi.page(chatId, { cursor: r.cursor, direction: "after", limit: PAGE });
-    setMessages(page.items);
-    setNextCursor(page.nextCursor);
-    setHasMore(page.hasMore);
-    setTimeout(() => virtuoso.current?.scrollToIndex({ index: 0, align: "start" }), 30);
+    await jumpToCursor(r.cursor);
+  }
+
+  async function jumpToMessage(messageId: string) {
+    // Update the URL first — the useEffect above will pick it up (but we also act directly).
+    const href = `/c/${chatId}?m=${encodeURIComponent(messageId)}`;
+    navigate(href);
+    try {
+      const r = await chatApi.jump(chatId, { messageId });
+      if (!r.cursor) return;
+      await jumpToCursor(r.cursor, messageId);
+    } catch (e) {
+      toast((e as Error).message, "error");
+    }
   }
 
   // Inline file upload → auto-attach once complete.
@@ -213,8 +359,39 @@ export function ChatView() {
     for (const f of Array.from(list)) enqueue(f, activeWs);
   }
 
+  function updateMentionFromCaret() {
+    const el = composerRef.current;
+    if (!el) return;
+    const caret = el.selectionStart ?? el.value.length;
+    const st = getMentionContext(el.value, caret);
+    setMentionState(st);
+  }
+
+  function pickMention(m: WorkspaceMember) {
+    const { body: nextBody, caret } = applyMention(draft, mentionState, m);
+    setDraft(nextBody);
+    setMentionState({ open: false, prefix: "", start: -1, end: caret });
+    // Restore focus + caret.
+    requestAnimationFrame(() => {
+      const el = composerRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(caret, caret);
+    });
+  }
+
+  const composerRect = composerRef.current?.getBoundingClientRect() ?? null;
+
   const threadMessage = openThreadFor ? messages.find((m) => m.id === openThreadFor) ?? null : null;
   const threadReplies = openThreadFor ? messages.filter((m) => m.parentId === openThreadFor) : [];
+
+  const chat = chatQuery.data;
+  const workspaces = useSession((s) => s.workspaces);
+  const activeWsRole = useMemo(() => workspaces.find((w) => w.id === activeWs)?.role, [workspaces, activeWs]);
+  const canManage =
+    Boolean(chat && user && chat.createdBy === user.id) ||
+    activeWsRole === "owner" ||
+    activeWsRole === "admin";
 
   function renderRow(index: number) {
     const m = messages[index];
@@ -222,10 +399,27 @@ export function ChatView() {
     const author = memberById.get(m.authorId);
     const mine = m.authorId === user?.id;
     const replies = messages.filter((r) => r.parentId === m.id).length;
+    const isHighlighted = highlightId === m.id;
     return (
-      <div style={{ display: "grid", gridTemplateColumns: "32px 1fr", gap: 10, padding: "6px 20px" }}>
-        <div className="av" style={{ background: author?.color ?? "var(--ember-500)", marginTop: 2 }}>
-          {author?.initials ?? m.authorId.slice(-2).toUpperCase()}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "32px 1fr",
+          gap: 10,
+          padding: "6px 20px",
+          background: isHighlighted ? "var(--ember-50)" : "transparent",
+          outline: isHighlighted ? "2px solid var(--ember-500)" : "none",
+          outlineOffset: -2,
+          transition: "background 400ms var(--ease-out), outline-color 400ms var(--ease-out)",
+        }}
+      >
+        <div style={{ position: "relative", marginTop: 2 }}>
+          <div className="av" style={{ background: author?.color ?? "var(--ember-500)" }}>
+            {author?.initials ?? m.authorId.slice(-2).toUpperCase()}
+          </div>
+          <div style={{ position: "absolute", right: -2, bottom: -2 }}>
+            <PresenceDot status={presence[m.authorId]} size={8} />
+          </div>
         </div>
         <div>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 2 }}>
@@ -234,6 +428,11 @@ export function ChatView() {
               {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </span>
             {m.editedAt && <span className="caseno">EDITED</span>}
+            {m.pinnedAt && (
+              <span className="caseno" style={{ color: "var(--ember-700)" }}>
+                <Icon.pin size={10} /> PINNED
+              </span>
+            )}
             {m.deletedAt && (
               <span className="chip">
                 <span className="dot" /> DELETED
@@ -313,6 +512,14 @@ export function ChatView() {
                 >
                   👍
                 </button>
+                <button
+                  className="btn btn-ghost"
+                  style={{ padding: "2px 6px", fontSize: 11 }}
+                  onClick={() => pinMut.mutate({ id: m.id, pinned: !m.pinnedAt })}
+                  title={m.pinnedAt ? "Unpin" : "Pin"}
+                >
+                  <Icon.pin size={11} /> {m.pinnedAt ? "Unpin" : "Pin"}
+                </button>
                 {mine && (
                   <button
                     className="btn btn-ghost"
@@ -337,10 +544,15 @@ export function ChatView() {
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0, background: "var(--bg)" }}>
         <div style={{ padding: "10px 20px", borderBottom: "1px solid var(--border-soft)", display: "flex", alignItems: "center", gap: 12, background: "var(--paper-0)" }}>
           <div style={{ font: "700 15px/1 var(--font-sans)", display: "flex", alignItems: "center", gap: 6 }}>
-            {chatQuery.data?.type === "dm" ? <Icon.user size={16} /> : <Icon.hash size={16} />}
-            {chatQuery.data?.name}
+            {chat?.type === "dm" ? <Icon.user size={16} /> : <Icon.hash size={16} />}
+            {chat?.name}
           </div>
-          <span className="caseno">CASE · {chatQuery.data?.type?.toUpperCase() ?? "—"}</span>
+          <span className="caseno">CASE · {chat?.type?.toUpperCase() ?? "—"}</span>
+          {chat?.archivedAt && (
+            <span className="chip" style={{ background: "var(--warning-bg)" }}>
+              <span className="dot" /> ARCHIVED
+            </span>
+          )}
 
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
             <input type="date" value={jumpAt} onChange={(e) => setJumpAt(e.target.value)} className="input" style={{ width: 150, padding: "4px 8px", fontSize: 12 }} />
@@ -350,9 +562,14 @@ export function ChatView() {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-            {[...memberById.values()].slice(0, 4).map((a, i) => (
-              <div key={i} className="av" style={{ marginLeft: i === 0 ? 0 : -6, border: "2px solid var(--paper-0)", background: a.color }}>
-                {a.initials}
+            {[...memberById.entries()].slice(0, 4).map(([uid, a], i) => (
+              <div key={uid} style={{ position: "relative", marginLeft: i === 0 ? 0 : -6 }}>
+                <div className="av" style={{ border: "2px solid var(--paper-0)", background: a.color }}>
+                  {a.initials}
+                </div>
+                <div style={{ position: "absolute", right: -1, bottom: -1 }}>
+                  <PresenceDot status={presence[uid]} size={7} />
+                </div>
               </div>
             ))}
             {memberById.size > 4 && (
@@ -365,7 +582,41 @@ export function ChatView() {
           <button className={`btn btn-ghost${showMedia ? " on" : ""}`} onClick={() => setShowMedia((v) => !v)}>
             <Icon.image size={14} /> Media
           </button>
+          <button className="btn btn-ghost" onClick={() => setSettingsOpen(true)} title="Chat settings">
+            <Icon.settings size={14} />
+          </button>
         </div>
+
+        {pinned.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              padding: "6px 20px",
+              borderBottom: "1px solid var(--border-soft)",
+              background: "var(--paper-100)",
+              overflowX: "auto",
+            }}
+          >
+            <span className="caseno" style={{ color: "var(--ember-700)", display: "flex", alignItems: "center", gap: 4 }}>
+              <Icon.pin size={10} /> PINNED · {pinned.length}
+            </span>
+            {pinned.map((p) => (
+              <button
+                key={p.id}
+                className="chip"
+                style={{ cursor: "pointer", whiteSpace: "nowrap", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }}
+                onClick={() => jumpToMessage(p.id)}
+                title={p.body}
+              >
+                <span style={{ font: "500 12px/1 var(--font-sans)", color: "var(--fg2)" }}>
+                  {(memberNameById.get(p.authorId) ?? p.authorId.slice(-4))}: {p.body.slice(0, 60)}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
 
         <div style={{ flex: 1, minHeight: 0 }}>
           <Virtuoso
@@ -395,7 +646,7 @@ export function ChatView() {
           )}
         </div>
 
-        <div style={{ padding: "10px 20px", borderTop: "1px solid var(--border-soft)", background: "var(--paper-0)" }}>
+        <div style={{ padding: "10px 20px", borderTop: "1px solid var(--border-soft)", background: "var(--paper-0)", position: "relative" }}>
           {pendingAttachments.length > 0 && (
             <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
               {pendingAttachments.map((fid) => (
@@ -414,15 +665,26 @@ export function ChatView() {
           )}
           <form onSubmit={send} style={{ border: "1px solid var(--border)", borderRadius: 10, background: "var(--paper-0)" }}>
             <textarea
+              ref={composerRef}
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(e) => {
+                setDraft(e.target.value);
+                // Defer to next tick so selectionStart reflects the new value.
+                requestAnimationFrame(updateMentionFromCaret);
+              }}
+              onKeyUp={updateMentionFromCaret}
+              onClick={updateMentionFromCaret}
               onKeyDown={(e) => {
+                // When the popover is open, let it consume navigation / commit keys.
+                if (mentionState.open && ["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"].includes(e.key)) {
+                  return;
+                }
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   void send(e as unknown as FormEvent);
                 }
               }}
-              placeholder={`Message ${chatQuery.data?.name ? "#" + chatQuery.data.name : "…"}`}
+              placeholder={`Message ${chat?.name ? "#" + chat.name : "…"}`}
               rows={1}
               style={{
                 width: "100%",
@@ -441,7 +703,23 @@ export function ChatView() {
               <button type="button" className="tb-btn" onClick={() => fileInput.current?.click()} title="Attach file">
                 <Icon.paperclip size={14} />
               </button>
-              <button type="button" className="tb-btn" title="Mention">
+              <button
+                type="button"
+                className="tb-btn"
+                title="Mention"
+                onClick={() => {
+                  const el = composerRef.current;
+                  if (!el) return;
+                  const caret = el.selectionStart ?? el.value.length;
+                  const insert = "@";
+                  setDraft((d) => d.slice(0, caret) + insert + d.slice(caret));
+                  requestAnimationFrame(() => {
+                    el.focus();
+                    el.setSelectionRange(caret + 1, caret + 1);
+                    updateMentionFromCaret();
+                  });
+                }}
+              >
                 <Icon.at size={14} />
               </button>
               <div style={{ flex: 1 }} />
@@ -450,6 +728,15 @@ export function ChatView() {
               </button>
             </div>
           </form>
+          {activeWs && (
+            <MentionPopover
+              workspaceId={activeWs}
+              state={mentionState}
+              anchorRect={composerRect}
+              onPick={pickMention}
+              onDismiss={() => setMentionState({ open: false, prefix: "", start: -1, end: 0 })}
+            />
+          )}
         </div>
       </div>
 
@@ -474,6 +761,22 @@ export function ChatView() {
       )}
 
       {!openThreadFor && showMedia && <MediaView chatId={chatId} onClose={() => setShowMedia(false)} />}
+
+      {settingsOpen && chat && (
+        <ChatSettingsDialog
+          chat={chat as ChatDetail}
+          canManage={canManage}
+          onClose={() => setSettingsOpen(false)}
+          onChanged={() => {
+            void qc.invalidateQueries({ queryKey: ["chat", chatId] });
+            void qc.invalidateQueries({ queryKey: ["chats", activeWs] });
+          }}
+          onDeleted={() => {
+            void qc.invalidateQueries({ queryKey: ["chats", activeWs] });
+            navigate("/");
+          }}
+        />
+      )}
     </div>
   );
 }
