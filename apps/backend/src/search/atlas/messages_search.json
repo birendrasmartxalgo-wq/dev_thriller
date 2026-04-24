@@ -1,0 +1,17 @@
+{
+  "name": "messages_search",
+  "database": "devthriller",
+  "collectionName": "messages",
+  "mappings": {
+    "dynamic": false,
+    "fields": {
+      "body": { "type": "string", "analyzer": "lucene.standard" },
+      "workspaceId": { "type": "objectId" },
+      "chatId": { "type": "objectId" },
+      "authorId": { "type": "objectId" },
+      "createdAt": { "type": "date" },
+      "hasAttachments": { "type": "boolean" },
+      "deletedAt": { "type": "date" }
+    }
+  }
+}

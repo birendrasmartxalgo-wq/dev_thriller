@@ -1,0 +1,28 @@
+services:
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly
+    container_name: dt-dragonfly
+    ports:
+      - "6379:6379"
+    ulimits:
+      memlock: -1
+    restart: unless-stopped
+    volumes:
+      - dragonfly-data:/data
+    command: [
+      "--logtostderr",
+      "--cache_mode=true"
+    ]
+
+  mongo:
+    image: mongo:7
+    container_name: dt-mongo
+    ports:
+      - "27017:27017"
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  dragonfly-data:
+  mongo-data:

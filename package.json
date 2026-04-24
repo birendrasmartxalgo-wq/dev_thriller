@@ -1,0 +1,22 @@
+{
+  "name": "dev-thriller",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun run --filter '*' dev",
+    "dev:backend": "bun run --cwd apps/backend dev",
+    "dev:frontend": "bun run --cwd apps/frontend dev",
+    "dev:dragonfly": "docker compose up -d dragonfly",
+    "build": "bun run --filter '*' build",
+    "typecheck": "bun run --filter '*' typecheck",
+    "seed": "bun run --cwd apps/backend seed"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

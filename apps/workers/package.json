@@ -1,0 +1,21 @@
+{
+  "name": "@dt/workers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "retention": "bun run --env-file ../backend/.env src/retention.ts",
+    "media-extract": "bun run --env-file ../backend/.env src/media-extract.ts",
+    "audit-verify": "bun run --env-file ../backend/.env src/audit-verify.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dt/backend": "workspace:*",
+    "mongodb": "^6.10.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.13",
+    "bun-types": "^1.1.34",
+    "typescript": "^5.6.3"
+  }
+}

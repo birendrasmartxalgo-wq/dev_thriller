@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "lib": ["ES2023"],
+    "types": ["bun-types"],
+    "noUncheckedIndexedAccess": false,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["../backend/src/*"],
+      "@be/*": ["../backend/src/*"]
+    }
+  },
+  "include": ["src/**/*", "../backend/src/**/*"]
+}

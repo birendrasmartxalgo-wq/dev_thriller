@@ -1,0 +1,16 @@
+{
+  "name": "files_search",
+  "database": "devthriller",
+  "collectionName": "files",
+  "mappings": {
+    "dynamic": false,
+    "fields": {
+      "name": { "type": "string", "analyzer": "lucene.standard" },
+      "workspaceId": { "type": "objectId" },
+      "mime": { "type": "string", "analyzer": "lucene.keyword" },
+      "uploaderId": { "type": "objectId" },
+      "createdAt": { "type": "date" },
+      "deletedAt": { "type": "date" }
+    }
+  }
+}

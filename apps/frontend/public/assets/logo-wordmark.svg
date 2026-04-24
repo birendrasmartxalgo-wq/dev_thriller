@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 72" width="360" height="72">
+  
+  <defs>
+    <clipPath id="tab2">
+      <path d="M4 14 Q4 8 10 8 L36 8 Q39 8 41 11 L44 17 Q46 20 49 20 L60 20 Q66 20 66 26 L66 62 Q66 68 60 68 L10 68 Q4 68 4 62 Z"></path>
+    </clipPath>
+  </defs>
+  <path d="M4 14 Q4 8 10 8 L36 8 Q39 8 41 11 L44 17 Q46 20 49 20 L60 20 Q66 20 66 26 L66 62 Q66 68 60 68 L10 68 Q4 68 4 62 Z" fill="#FF512E"></path>
+  <rect x="-4" y="48" width="80" height="7" transform="rotate(-14 35 51)" fill="#FFCB3D" clip-path="url(#tab2)"></rect>
+  <g font-family="Geist, system-ui, sans-serif" font-weight="800" fill="#FFFDF8">
+    <text x="11" y="45" font-size="24" letter-spacing="-1">D</text>
+    <text x="32" y="45" font-size="24" letter-spacing="-1">T</text>
+  </g>
+  <circle cx="58" cy="14" r="1.8" fill="#0E1130"></circle>
+
+  
+  <g font-family="Geist, system-ui, sans-serif" fill="#0E1130">
+    <text x="84" y="48" font-size="30" font-weight="800" letter-spacing="-1">Dev</text>
+    <text x="148" y="48" font-size="30" font-weight="400" font-style="italic" font-family="&#39;Instrument Serif&#39;, serif" fill="#C8361A">Thriller</text>
+  </g>
+  
+  <text x="84" y="62" font-family="&#39;JetBrains Mono&#39;, monospace" font-size="9" fill="#8F8467" letter-spacing="2">CASE · NO. 001</text>
+</svg>
