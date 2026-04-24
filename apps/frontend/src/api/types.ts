@@ -57,10 +57,13 @@ export interface ChatSummary {
   topic: string | null;
   lastMessageAt: string | null;
   members: string[] | null;
+  archivedAt?: string | null;
 }
 
 export interface ChatDetail extends ChatSummary {
   workspaceId: string;
+  createdBy?: string;
+  archivedAt?: string | null;
 }
 
 export interface MessageAttachment {
@@ -80,10 +83,24 @@ export interface MessagePublic {
   mentions: string[];
   attachments: MessageAttachment[];
   reactions: Record<string, string[]>;
+  pinnedAt?: string | null;
+  pinnedBy?: string | null;
   createdAt: string;
   editedAt: string | null;
   deletedAt: string | null;
 }
+
+export interface PinnedMessage {
+  id: string;
+  chatId: string;
+  authorId: string;
+  body: string;
+  createdAt: string;
+  pinnedAt: string | null;
+  pinnedBy: string | null;
+}
+
+export type PresenceStatus = "green" | "amber" | "gray";
 
 export interface MessagePage {
   items: MessagePublic[];

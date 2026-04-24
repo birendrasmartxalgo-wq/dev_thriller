@@ -81,6 +81,49 @@ export const wsRoutes = new Elysia({ prefix: "/v1" })
       } else if (msg.type === "ping") {
         await redis.set(keys.presence(auth.userId.toHexString()), "1", "EX", 60);
         ws.send(JSON.stringify({ type: "pong" }));
+      } else if (msg.type === "idle") {
+        // Client signals idle (tab hidden or no activity 5+ min) — mark amber.
+        await redis.set(keys.presence(auth.userId.toHexString()), "idle", "EX", 60);
+      } else if (msg.type === "replay" && typeof msg.chat === "string" && typeof msg.since === "string") {
+        // Offline replay on reconnect: stream messages created after `since` as individual msg:new events.
+        if (!ObjectId.isValid(msg.chat)) return;
+        const chatId = new ObjectId(msg.chat);
+        const chat = await col.chats().findOne({ _id: chatId });
+        if (!chat) return;
+        if (!auth.workspaceIds.has(chat.workspaceId.toHexString())) return;
+        const since = new Date(msg.since);
+        if (isNaN(since.getTime())) return;
+        const items = await col
+          .messages()
+          .find({ chatId, createdAt: { $gt: since }, deletedAt: { $exists: false } })
+          .sort({ createdAt: 1 })
+          .limit(500)
+          .toArray();
+        for (const m of items) {
+          ws.send(
+            JSON.stringify({
+              type: "msg:new",
+              message: {
+                id: m._id.toHexString(),
+                chatId: m.chatId.toHexString(),
+                authorId: m.authorId.toHexString(),
+                parentId: m.parentId?.toHexString() ?? null,
+                body: m.body,
+                mentions: m.mentions?.map((x) => x.toHexString()) ?? [],
+                attachments: m.attachments ?? [],
+                reactions: Object.fromEntries(
+                  Object.entries(m.reactions ?? {}).map(([k, v]) => [k, (v as ObjectId[]).map((x) => x.toHexString())])
+                ),
+                pinnedAt: m.pinnedAt ?? null,
+                pinnedBy: m.pinnedBy?.toHexString() ?? null,
+                createdAt: m.createdAt,
+                editedAt: m.editedAt ?? null,
+                deletedAt: m.deletedAt ?? null,
+              },
+            })
+          );
+        }
+        ws.send(JSON.stringify({ type: "replay.done", chat: msg.chat, count: items.length }));
       }
     },
     async close(ws) {

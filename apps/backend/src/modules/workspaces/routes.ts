@@ -1,6 +1,7 @@
 import { Elysia, t } from "elysia";
 import { ObjectId } from "mongodb";
 import { col } from "@/db/mongo";
+import { redis, keys } from "@/db/dragonfly";
 import { authPlugin, requireAuth } from "@/middleware/auth";
 import { Errors } from "@/lib/errors";
 import { slugify, caseNumber } from "@/lib/slug";
@@ -137,7 +138,7 @@ export const workspaceRoutes = new Elysia({ prefix: "/v1/workspaces" })
 
   .get(
     "/:id/members",
-    async ({ auth, params }) => {
+    async ({ auth, params, query }) => {
       requireAuth(auth);
       const wsId = oid(params.id);
       const mem = await getMembership(wsId, auth.userId);
@@ -146,19 +147,53 @@ export const workspaceRoutes = new Elysia({ prefix: "/v1/workspaces" })
       const userIds = mems.map((m) => m.userId);
       const users = await col.users().find({ _id: { $in: userIds } }).toArray();
       const byId = new Map(users.map((u) => [u._id.toHexString(), u]));
-      return {
-        items: mems.map((m) => {
-          const u = byId.get(m.userId.toHexString());
-          return {
-            userId: m.userId.toHexString(),
-            email: u?.email ?? null,
-            name: u?.name ?? null,
-            avatarUrl: u?.avatarUrl ?? null,
-            role: m.role,
-            status: m.status,
-          };
-        }),
-      };
+      let items = mems.map((m) => {
+        const u = byId.get(m.userId.toHexString());
+        return {
+          userId: m.userId.toHexString(),
+          email: u?.email ?? null,
+          name: u?.name ?? null,
+          avatarUrl: u?.avatarUrl ?? null,
+          role: m.role,
+          status: m.status,
+        };
+      });
+      const q = query.q?.trim().toLowerCase();
+      if (q) {
+        items = items.filter(
+          (m) =>
+            (m.name ?? "").toLowerCase().startsWith(q) ||
+            (m.email ?? "").toLowerCase().startsWith(q) ||
+            (m.name ?? "").toLowerCase().includes(q)
+        );
+      }
+      const limit = query.limit ? Math.min(Math.max(Number(query.limit), 1), 100) : undefined;
+      if (limit) items = items.slice(0, limit);
+      return { items };
+    },
+    { params: IdParam, query: t.Object({ q: t.Optional(t.String()), limit: t.Optional(t.Numeric()) }) }
+  )
+
+  .get(
+    "/:id/presence",
+    async ({ auth, params }) => {
+      requireAuth(auth);
+      const wsId = oid(params.id);
+      const mem = await getMembership(wsId, auth.userId);
+      if (!mem) throw Errors.forbidden();
+      const mems = await col.memberships().find({ workspaceId: wsId }).toArray();
+      const uids = mems.map((m) => m.userId.toHexString());
+      const out: Record<string, "green" | "amber" | "gray"> = {};
+      if (uids.length === 0) return out;
+      // MGET presence:<uid> — value is "1" (green), "idle" (amber), or missing (gray).
+      const vals = await redis.mget(...uids.map((u) => keys.presence(u)));
+      uids.forEach((uid, i) => {
+        const v = vals[i];
+        if (!v) out[uid] = "gray";
+        else if (v === "idle") out[uid] = "amber";
+        else out[uid] = "green";
+      });
+      return out;
     },
     { params: IdParam }
   )

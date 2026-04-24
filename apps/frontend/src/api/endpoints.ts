@@ -10,6 +10,8 @@ import type {
   LoginResponse,
   MessagePage,
   MessagePublic,
+  PinnedMessage,
+  PresenceStatus,
   ProjectSummary,
   SearchResult,
   SignupResponse,
@@ -42,10 +44,16 @@ export const workspaceApi = {
   create: (body: { name: string; slug?: string }) =>
     api.post<{ id: string; slug: string; name: string }>("/v1/workspaces", body),
   get: (id: string) => api.get<WorkspaceDetail>(`/v1/workspaces/${id}`),
-  members: (id: string) =>
-    api.get<{ items: WorkspaceMember[] }>(`/v1/workspaces/${id}/members`),
+  members: (id: string, q?: { q?: string; limit?: number }) => {
+    const sp = new URLSearchParams();
+    if (q?.q) sp.set("q", q.q);
+    if (q?.limit !== undefined) sp.set("limit", String(q.limit));
+    const qs = sp.toString();
+    return api.get<{ items: WorkspaceMember[] }>(`/v1/workspaces/${id}/members${qs ? `?${qs}` : ""}`);
+  },
   invite: (id: string, body: { emails: string[]; role: "admin" | "member" | "guest" }) =>
     api.post<{ invites: { email: string; token: string }[] }>(`/v1/workspaces/${id}/invites`, body),
+  presence: (id: string) => api.get<Record<string, PresenceStatus>>(`/v1/workspaces/${id}/presence`),
 };
 
 export const projectApi = {
@@ -56,9 +64,10 @@ export const projectApi = {
 };
 
 export const chatApi = {
-  list: (workspaceId: string, projectId?: string) => {
+  list: (workspaceId: string, projectId?: string, opts?: { includeArchived?: boolean }) => {
     const q = new URLSearchParams({ workspaceId });
     if (projectId) q.set("projectId", projectId);
+    if (opts?.includeArchived) q.set("includeArchived", "true");
     return api.get<{ items: ChatSummary[] }>(`/v1/chats?${q.toString()}`);
   },
   create: (body: {
@@ -70,8 +79,16 @@ export const chatApi = {
     members?: string[];
   }) => api.post<{ id: string }>("/v1/chats", body),
   get: (id: string) => api.get<ChatDetail>(`/v1/chats/${id}`),
-  jump: (id: string, at: string) =>
-    api.get<{ cursor: string | null }>(`/v1/chats/${id}/jump?at=${encodeURIComponent(at)}`),
+  update: (id: string, body: { name?: string; topic?: string | null; archivedAt?: null | boolean }) =>
+    api.patch<{ ok: true }>(`/v1/chats/${id}`, body),
+  remove: (id: string) => api.delete<{ ok: true }>(`/v1/chats/${id}`),
+  jump: (id: string, q: { at?: string; messageId?: string }) => {
+    const sp = new URLSearchParams();
+    if (q.at) sp.set("at", q.at);
+    if (q.messageId) sp.set("messageId", q.messageId);
+    return api.get<{ cursor: string | null }>(`/v1/chats/${id}/jump?${sp.toString()}`);
+  },
+  pinned: (id: string) => api.get<{ items: PinnedMessage[] }>(`/v1/chats/${id}/pinned`),
   media: (
     id: string,
     q: { kind?: string; sender?: string; from?: string; to?: string; limit?: number } = {}
@@ -96,6 +113,8 @@ export const messageApi = {
   remove: (id: string) => api.delete<{ ok: true }>(`/v1/messages/${id}`),
   react: (id: string, body: { emoji: string; action: "add" | "remove" }) =>
     api.post<MessagePublic>(`/v1/messages/${id}/reactions`, body),
+  pin: (id: string) => api.post<MessagePublic>(`/v1/messages/${id}/pin`),
+  unpin: (id: string) => api.delete<MessagePublic>(`/v1/messages/${id}/pin`),
 };
 
 export const fileApi = {

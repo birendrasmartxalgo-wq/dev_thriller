@@ -29,10 +29,43 @@ function publicMessage(m: MessageDoc) {
     reactions: Object.fromEntries(
       Object.entries(m.reactions ?? {}).map(([k, v]) => [k, (v as ObjectId[]).map((x) => x.toHexString())])
     ),
+    pinnedAt: m.pinnedAt ?? null,
+    pinnedBy: m.pinnedBy?.toHexString() ?? null,
     createdAt: m.createdAt,
     editedAt: m.editedAt ?? null,
     deletedAt: m.deletedAt ?? null,
   };
+}
+
+// Parse @Name tokens in the body. We look up each name (greedy, matches up to 3 words)
+// against the chat's workspace members. First exact case-insensitive match wins.
+async function resolveBodyMentions(body: string, workspaceId: ObjectId): Promise<ObjectId[]> {
+  const re = /@([A-Za-z][A-Za-z0-9._-]*(?:\s+[A-Za-z][A-Za-z0-9._-]*){0,2})/g;
+  const raw = new Set<string>();
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body)) !== null) raw.add(m[1]!.trim());
+  if (raw.size === 0) return [];
+  const mems = await col.memberships().find({ workspaceId, status: "active" }).toArray();
+  const uids = mems.map((x) => x.userId);
+  const users = await col.users().find({ _id: { $in: uids } }).toArray();
+  const byName = new Map<string, ObjectId>();
+  for (const u of users) byName.set(u.name.toLowerCase(), u._id);
+  const result: ObjectId[] = [];
+  const seen = new Set<string>();
+  for (const token of raw) {
+    // try longest → shortest prefix so "@Ada Lovelace" matches before "@Ada"
+    const parts = token.split(/\s+/);
+    for (let n = parts.length; n >= 1; n--) {
+      const candidate = parts.slice(0, n).join(" ").toLowerCase();
+      const uid = byName.get(candidate);
+      if (uid && !seen.has(uid.toHexString())) {
+        result.push(uid);
+        seen.add(uid.toHexString());
+        break;
+      }
+    }
+  }
+  return result;
 }
 
 // Simple URL + mention extractors for media-tab + notifications.
@@ -151,6 +184,8 @@ export const messageRoutes = new Elysia({ prefix: "/v1" })
       const mem = await getMembership(chat.workspaceId, auth.userId);
       if (!mem) throw Errors.forbidden();
       assertRoleAtLeast(mem.role, "guest");
+      // Per-user msg:send rate limiter — 60 messages / 60s.
+      await enforceRateLimit(auth.userId.toHexString(), { bucket: "msg:send", limit: 60, windowSec: 60 });
 
       const now = new Date();
       const id = new ObjectId();
@@ -167,6 +202,17 @@ export const messageRoutes = new Elysia({ prefix: "/v1" })
         });
       }
 
+      // Merge client-provided mentions (explicit IDs from autocomplete) with ones
+      // we parse from the body. Plain-text "@Name" is the source of truth visually;
+      // mentions[] on the doc is the sidecar list used for notifications + filtering.
+      const explicitMentions = (body.mentions ?? []).map(oid);
+      const parsedMentions = await resolveBodyMentions(body.body, chat.workspaceId);
+      const mentionSet = new Map<string, ObjectId>();
+      for (const m of [...explicitMentions, ...parsedMentions]) {
+        mentionSet.set(m.toHexString(), m);
+      }
+      const mentions = [...mentionSet.values()];
+
       const doc: MessageDoc = {
         _id: id,
         chatId,
@@ -174,7 +220,7 @@ export const messageRoutes = new Elysia({ prefix: "/v1" })
         authorId: auth.userId,
         parentId: body.parentId ? oid(body.parentId) : undefined,
         body: body.body,
-        mentions: (body.mentions ?? []).map(oid),
+        mentions,
         attachments: attachments.length ? attachments : undefined,
         createdAt: now,
       };
@@ -367,4 +413,51 @@ export const messageRoutes = new Elysia({ prefix: "/v1" })
         limit: t.Optional(t.Numeric()),
       }),
     }
+  )
+
+  // Pin a message. ACL: any active member of the workspace may pin — low-friction
+  // parity with Slack default. Unpin mirrors.
+  .post(
+    "/messages/:id/pin",
+    async ({ auth, params }) => {
+      requireAuth(auth);
+      const id = oid(params.id);
+      const m = await col.messages().findOne({ _id: id });
+      if (!m || m.deletedAt) throw Errors.notFound("Message");
+      const mem = await getMembership(m.workspaceId, auth.userId);
+      if (!mem) throw Errors.forbidden();
+      // Cap pins per chat to keep the pinned strip readable.
+      const pinned = await col
+        .messages()
+        .countDocuments({ chatId: m.chatId, pinnedAt: { $exists: true }, deletedAt: { $exists: false } });
+      if (!m.pinnedAt && pinned >= 50) {
+        throw Errors.badRequest("pin_cap", "This chat already has 50 pinned messages");
+      }
+      await col
+        .messages()
+        .updateOne({ _id: id }, { $set: { pinnedAt: new Date(), pinnedBy: auth.userId } });
+      const updated = await col.messages().findOne({ _id: id });
+      const payload = publicMessage(updated!);
+      await publishChat(m.chatId.toHexString(), { type: "message.pinned", message: payload });
+      return payload;
+    },
+    { params: t.Object({ id: t.String() }) }
+  )
+
+  .delete(
+    "/messages/:id/pin",
+    async ({ auth, params }) => {
+      requireAuth(auth);
+      const id = oid(params.id);
+      const m = await col.messages().findOne({ _id: id });
+      if (!m) throw Errors.notFound("Message");
+      const mem = await getMembership(m.workspaceId, auth.userId);
+      if (!mem) throw Errors.forbidden();
+      await col.messages().updateOne({ _id: id }, { $unset: { pinnedAt: "", pinnedBy: "" } });
+      const updated = await col.messages().findOne({ _id: id });
+      const payload = publicMessage(updated!);
+      await publishChat(m.chatId.toHexString(), { type: "message.unpinned", message: payload });
+      return payload;
+    },
+    { params: t.Object({ id: t.String() }) }
   );

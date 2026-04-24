@@ -27,6 +27,7 @@ export async function ensureIndexes(): Promise<void> {
     col.messages().createIndex({ chatId: 1, createdAt: -1 }),
     col.messages().createIndex({ parentId: 1 }, { sparse: true }),
     col.messages().createIndex({ workspaceId: 1, createdAt: -1 }),
+    col.messages().createIndex({ chatId: 1, pinnedAt: -1 }, { sparse: true }),
     col.messages().createIndex({ body: "text" }, { name: "messages_text_fallback" }),
 
     col.files().createIndex({ workspaceId: 1, deletedAt: 1 }),
