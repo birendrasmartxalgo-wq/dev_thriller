@@ -21,14 +21,11 @@ import { adminRoutes } from "@/modules/admin/routes";
 import { notificationRoutes } from "@/modules/notifications/routes";
 import { wsRoutes } from "@/ws/routes";
 
-async function bootstrap() {
-  await connectMongo();
-  await ensureIndexes();
-  await connectDragonfly();
-  subscribeAclInvalidation();
-  await startPubSub();
-
-  const app = new Elysia()
+// Pure factory — assembles the Elysia app without performing side-effects like
+// `.listen()` or opening DB connections. This keeps the shape knowable statically
+// so Eden Treaty can infer end-to-end types via `type App = ReturnType<typeof buildApp>`.
+export function buildApp() {
+  return new Elysia()
     .use(
       cors({
         origin: [env.FRONTEND_ORIGIN],
@@ -59,17 +56,30 @@ async function bootstrap() {
     .use(searchRoutes)
     .use(adminRoutes)
     .use(notificationRoutes)
-    .use(wsRoutes)
-    .listen(env.PORT);
+    .use(wsRoutes);
+}
+
+async function bootstrap() {
+  await connectMongo();
+  await ensureIndexes();
+  await connectDragonfly();
+  subscribeAclInvalidation();
+  await startPubSub();
+
+  const app = buildApp().listen(env.PORT);
 
   logger.info({ port: env.PORT, env: env.NODE_ENV }, "dev-thriller backend up");
   return app;
 }
 
-bootstrap().catch((err) => {
-  console.error("Bootstrap failed:", err);
-  process.exit(1);
-});
+// Only bootstrap when this file is the entry point (not when imported for its types
+// via Eden Treaty in the frontend).
+if (import.meta.main) {
+  bootstrap().catch((err) => {
+    console.error("Bootstrap failed:", err);
+    process.exit(1);
+  });
+}
 
-// Re-export the Elysia app type for Eden Treaty. Callers can `import type { App } from '@dt/backend'`.
-export type App = Awaited<ReturnType<typeof bootstrap>>;
+// Re-export the Elysia app type for Eden Treaty. Callers import via `@dt/shared`.
+export type App = ReturnType<typeof buildApp>;
