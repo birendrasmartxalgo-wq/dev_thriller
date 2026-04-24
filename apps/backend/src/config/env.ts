@@ -24,7 +24,14 @@ const schema = z.object({
   FRONTEND_ORIGIN: z.string().default("http://localhost:5173"),
 
   EMAIL_FROM: z.string().default("Dev Thriller <no-reply@devthriller.app>"),
-  RESEND_API_KEY: z.string().default(""),
+
+  // Generic SMTP — works with Amazon SES, Postmark, Mailgun, Brevo, self-hosted Postfix, etc.
+  SMTP_HOST: z.string().default(""),
+  SMTP_PORT: z.coerce.number().int().default(587),
+  SMTP_USER: z.string().default(""),
+  SMTP_PASS: z.string().default(""),
+  SMTP_SECURE: z.coerce.boolean().default(false),
+  SMTP_FROM: z.string().default("Dev Thriller <no-reply@devthriller.app>"),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -39,3 +46,16 @@ export type Env = typeof env;
 
 export const isProd = env.NODE_ENV === "production";
 export const r2Configured = Boolean(env.R2_ACCOUNT_ID && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY);
+export const smtpConfigured = Boolean(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS);
+
+// Refuse to boot in production with default / placeholder secrets.
+if (isProd) {
+  const bad: string[] = [];
+  if (env.JWT_ACCESS_SECRET.includes("please_rotate") || env.JWT_REFRESH_SECRET.includes("please_rotate")) bad.push("JWT_*_SECRET");
+  if (env.MONGO_URI.startsWith("mongodb://localhost")) bad.push("MONGO_URI");
+  if (!r2Configured) bad.push("R2_*");
+  if (bad.length) {
+    console.error(`refusing to start in production with default / missing secrets: ${bad.join(", ")}`);
+    process.exit(1);
+  }
+}

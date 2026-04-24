@@ -1,16 +1,19 @@
 import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
 import { swagger } from "@elysiajs/swagger";
-import { env } from "@/config/env";
+import { env, r2Configured, smtpConfigured } from "@/config/env";
 import { logger } from "@/lib/logger";
-import { connectMongo } from "@/db/mongo";
+import { connectMongo, db } from "@/db/mongo";
 import { ensureIndexes } from "@/db/indexes";
 import { connectDragonfly, redis } from "@/db/dragonfly";
 import { errorPlugin } from "@/middleware/errors";
+import { applySecurity } from "@/middleware/security";
 import { subscribeAclInvalidation } from "@/lib/acl";
 import { startPubSub } from "@/ws/bus";
 
 import { authRoutes } from "@/modules/auth/routes";
+import { passwordResetRoutes } from "@/modules/auth/passwordReset";
+import { userRoutes } from "@/modules/users/routes";
 import { workspaceRoutes, inviteRoutes } from "@/modules/workspaces/routes";
 import { projectRoutes } from "@/modules/projects/routes";
 import { chatRoutes } from "@/modules/chats/routes";
@@ -28,6 +31,8 @@ async function bootstrap() {
   subscribeAclInvalidation();
   await startPubSub();
 
+  const startedAt = new Date();
+
   const app = new Elysia()
     .use(
       cors({
@@ -35,6 +40,7 @@ async function bootstrap() {
         credentials: true,
       })
     )
+    .use(applySecurity)
     .use(
       swagger({
         path: "/docs",
@@ -44,11 +50,33 @@ async function bootstrap() {
       })
     )
     .use(errorPlugin)
-    .get("/health", async () => {
-      const pong = await redis.ping();
-      return { status: "ok", redis: pong === "PONG", ts: new Date().toISOString() };
+    .get("/health", () => ({ status: "ok", ts: new Date().toISOString() }))
+    .get("/ready", async () => {
+      // Deep readiness: Mongo ping + Dragonfly ping. Used by k8s readinessProbe and VPS LB.
+      const checks: Record<string, boolean | string> = {};
+      try {
+        await db().command({ ping: 1 });
+        checks.mongo = true;
+      } catch (err) {
+        checks.mongo = String((err as Error).message);
+      }
+      try {
+        const pong = await redis.ping();
+        checks.redis = pong === "PONG";
+      } catch (err) {
+        checks.redis = String((err as Error).message);
+      }
+      checks.r2 = r2Configured;
+      checks.smtp = smtpConfigured;
+      const ready = checks.mongo === true && checks.redis === true;
+      return new Response(JSON.stringify({ ready, checks, uptime: Math.round((Date.now() - startedAt.getTime()) / 1000) }), {
+        status: ready ? 200 : 503,
+        headers: { "content-type": "application/json" },
+      });
     })
     .use(authRoutes)
+    .use(passwordResetRoutes)
+    .use(userRoutes)
     .use(workspaceRoutes)
     .use(inviteRoutes)
     .use(projectRoutes)
@@ -62,7 +90,7 @@ async function bootstrap() {
     .use(wsRoutes)
     .listen(env.PORT);
 
-  logger.info({ port: env.PORT, env: env.NODE_ENV }, "dev-thriller backend up");
+  logger.info({ port: env.PORT, env: env.NODE_ENV, r2: r2Configured, smtp: smtpConfigured }, "dev-thriller backend up");
   return app;
 }
 

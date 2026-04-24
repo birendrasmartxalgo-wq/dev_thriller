@@ -7,6 +7,7 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
+  PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env, r2Configured } from "@/config/env";
@@ -87,4 +88,22 @@ export async function statObject(key: string) {
 export function fileKey(workspaceId: string, fileId: string, version: number, filename: string) {
   const safe = filename.replace(/[^\w.\- ]/g, "_");
   return `workspaces/${workspaceId}/files/${fileId}/v${version}/${safe}`;
+}
+
+// Small inline put — used for avatars (≤ 1 MB).
+export async function putObject(key: string, body: Buffer, contentType: string) {
+  await r2().send(
+    new PutObjectCommand({ Bucket: env.R2_BUCKET, Key: key, Body: body, ContentType: contentType })
+  );
+}
+
+// Avatar upload — returns a signed URL valid for 7 days.
+// Public URL option: if R2_PUBLIC_URL is set (Cloudflare-side custom domain), return that instead.
+export async function uploadAvatar(key: string, body: Buffer, contentType: string): Promise<string> {
+  await putObject(key, body, contentType);
+  if (env.R2_PUBLIC_URL) {
+    const base = env.R2_PUBLIC_URL.replace(/\/$/, "");
+    return `${base}/${key}`;
+  }
+  return signDownloadUrl(key, 7 * 86_400);
 }

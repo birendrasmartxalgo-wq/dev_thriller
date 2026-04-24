@@ -1,11 +1,13 @@
 // Full-page search: live query, tabs, operator hints, jump-to-message.
 
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { searchApi } from "@/api/endpoints";
+import { savedSearchApi } from "@/api/adminApi";
 import { useSession } from "@/store/session";
 import { navigate, useLocation } from "@/router";
 import { Icon } from "@/components/Icons";
+import { toast } from "@/store/toast";
 
 type TypeFilter = "all" | "message" | "file";
 
@@ -35,6 +37,25 @@ export function SearchView() {
     queryKey: ["search", activeWs, q, type],
     queryFn: () => searchApi.query({ q, workspaceId: activeWs!, type, limit: 40 }),
     enabled: Boolean(activeWs && q.trim().length >= 2),
+  });
+
+  const saved = useQuery({
+    queryKey: ["saved-search", activeWs],
+    queryFn: () => savedSearchApi.list(activeWs!),
+    enabled: Boolean(activeWs),
+  });
+  const qc = useQueryClient();
+  const create = useMutation({
+    mutationFn: (name: string) => savedSearchApi.create({ workspaceId: activeWs!, name, query: q }),
+    onSuccess: () => {
+      toast("Search saved");
+      qc.invalidateQueries({ queryKey: ["saved-search", activeWs] });
+    },
+    onError: (e) => toast((e as Error).message, "error"),
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => savedSearchApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["saved-search", activeWs] }),
   });
 
   const parsed = res.data?.parsed;
@@ -77,7 +98,38 @@ export function SearchView() {
             </button>
           ))}
         </div>
+        <button
+          className="btn btn-secondary"
+          onClick={() => {
+            const name = window.prompt("Save this query as")?.trim();
+            if (name) create.mutate(name);
+          }}
+          disabled={!q.trim() || create.isPending}
+        >
+          <Icon.pin size={14} /> Save
+        </button>
       </div>
+
+      {saved.data && saved.data.items.length > 0 && (
+        <div style={{ padding: "10px 24px 0", display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {saved.data.items.map((s) => (
+            <span key={s.id} className="chip" style={{ cursor: "pointer", paddingRight: 4 }} onClick={() => setQ(s.query)}>
+              <span className="dot" />
+              {s.name.toUpperCase()}
+              <button
+                className="tb-btn"
+                style={{ width: 18, height: 18, padding: 0, marginLeft: 6 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  remove.mutate(s.id);
+                }}
+              >
+                <Icon.x size={10} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {parsed && (parsed.from || parsed.has || parsed.before || parsed.after || parsed.inChat) && (
         <div style={{ padding: "10px 24px 0", display: "flex", flexWrap: "wrap", gap: 6 }}>

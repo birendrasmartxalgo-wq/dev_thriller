@@ -51,6 +51,8 @@ export function ChatView() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [sending, setSending] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
   const [openThreadFor, setOpenThreadFor] = useState<string | null>(null);
   const [showMedia, setShowMedia] = useState(false);
   const [jumpAt, setJumpAt] = useState("");
@@ -178,6 +180,15 @@ export function ChatView() {
     mutationFn: (id: string) => messageApi.remove(id),
     onError: (e) => toast((e as Error).message, "error"),
   });
+  const editMut = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: string }) => messageApi.edit(id, { body }),
+    onSuccess: (m) => {
+      setMessages((prev) => prev.map((x) => (x.id === m.id ? m : x)));
+      setEditingId(null);
+      setEditDraft("");
+    },
+    onError: (e) => toast((e as Error).message, "error"),
+  });
   const reactMut = useMutation({
     mutationFn: ({ id, emoji, action }: { id: string; emoji: string; action: "add" | "remove" }) => messageApi.react(id, { emoji, action }),
     onError: (e) => toast((e as Error).message, "error"),
@@ -240,9 +251,46 @@ export function ChatView() {
               </span>
             )}
           </div>
-          <div style={{ font: "400 13px/1.5 var(--font-sans)", color: "var(--fg1)" }}>
-            {m.deletedAt ? <em style={{ color: "var(--fg3)" }}>Message removed.</em> : renderBodyWithMentions(m.body, memberNameById)}
-          </div>
+          {editingId === m.id ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (editDraft.trim()) editMut.mutate({ id: m.id, body: editDraft.trim() });
+              }}
+              style={{ marginTop: 4 }}
+            >
+              <textarea
+                autoFocus
+                value={editDraft}
+                onChange={(e) => setEditDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setEditingId(null);
+                    setEditDraft("");
+                  } else if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (editDraft.trim()) editMut.mutate({ id: m.id, body: editDraft.trim() });
+                  }
+                }}
+                className="input"
+                rows={2}
+                style={{ resize: "vertical" }}
+              />
+              <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                <button type="submit" className="btn btn-primary" style={{ padding: "4px 10px" }}>
+                  Save
+                </button>
+                <button type="button" className="btn btn-ghost" style={{ padding: "4px 10px" }} onClick={() => { setEditingId(null); setEditDraft(""); }}>
+                  Cancel
+                </button>
+                <span className="caseno" style={{ marginLeft: "auto" }}>⏎ save · esc cancel</span>
+              </div>
+            </form>
+          ) : (
+            <div style={{ font: "400 13px/1.5 var(--font-sans)", color: "var(--fg1)" }}>
+              {m.deletedAt ? <em style={{ color: "var(--fg3)" }}>Message removed.</em> : renderBodyWithMentions(m.body, memberNameById)}
+            </div>
+          )}
 
           {m.attachments.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
@@ -314,15 +362,27 @@ export function ChatView() {
                   👍
                 </button>
                 {mine && (
-                  <button
-                    className="btn btn-ghost"
-                    style={{ padding: "2px 6px", fontSize: 11, color: "var(--blood-700)" }}
-                    onClick={() => {
-                      if (confirm("Delete this message?")) deleteMut.mutate(m.id);
-                    }}
-                  >
-                    Delete
-                  </button>
+                  <>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ padding: "2px 6px", fontSize: 11 }}
+                      onClick={() => {
+                        setEditingId(m.id);
+                        setEditDraft(m.body);
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ padding: "2px 6px", fontSize: 11, color: "var(--blood-700)" }}
+                      onClick={() => {
+                        if (confirm("Delete this message?")) deleteMut.mutate(m.id);
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </>
                 )}
               </>
             )}

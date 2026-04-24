@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: dragonfly
+  namespace: dev-thriller
+spec:
+  serviceName: dragonfly
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dragonfly
+  template:
+    metadata:
+      labels:
+        app: dragonfly
+    spec:
+      containers:
+        - name: dragonfly
+          image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+          args: ["--logtostderr", "--cache_mode=true", "--maxmemory=1gb"]
+          ports:
+            - containerPort: 6379
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests: { cpu: "200m", memory: "256Mi" }
+            limits:   { cpu: "2",    memory: "1.5Gi" }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dragonfly
+  namespace: dev-thriller
+spec:
+  selector:
+    app: dragonfly
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+  clusterIP: None

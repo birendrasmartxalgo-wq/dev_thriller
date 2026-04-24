@@ -7,6 +7,8 @@ import { slugify, caseNumber } from "@/lib/slug";
 import { writeAudit } from "@/lib/audit";
 import { assertRoleAtLeast, getMembership, invalidateAclCache } from "@/lib/acl";
 import { randomToken } from "@/lib/hash";
+import { sendInviteEmail } from "@/lib/email";
+import { env } from "@/config/env";
 
 const IdParam = t.Object({ id: t.String() });
 
@@ -90,9 +92,47 @@ export const workspaceRoutes = new Elysia({ prefix: "/v1/workspaces" })
         caseNumber: ws.caseNumber,
         plan: ws.plan,
         role: mem.role,
+        retention: ws.retention ?? null,
       };
     },
     { params: IdParam }
+  )
+
+  .patch(
+    "/:id",
+    async ({ auth, params, body }) => {
+      requireAuth(auth);
+      const wsId = oid(params.id);
+      const mem = await getMembership(wsId, auth.userId);
+      if (!mem) throw Errors.forbidden();
+      assertRoleAtLeast(mem.role, "admin");
+      const $set: Record<string, unknown> = {};
+      if (body.name !== undefined) $set.name = body.name.trim();
+      if (body.retention !== undefined) $set.retention = body.retention;
+      if (Object.keys($set).length === 0) return { ok: true };
+      await col.workspaces().updateOne({ _id: wsId }, { $set });
+      await writeAudit({
+        workspaceId: wsId,
+        actorId: auth.userId,
+        verb: "workspace.update",
+        objectType: "workspace",
+        objectId: wsId,
+        metadata: $set,
+      });
+      return { ok: true };
+    },
+    {
+      params: IdParam,
+      body: t.Object({
+        name: t.Optional(t.String({ minLength: 1, maxLength: 80 })),
+        retention: t.Optional(
+          t.Object({
+            messagesDays: t.Optional(t.Number({ minimum: 0, maximum: 3650 })),
+            filesDays: t.Optional(t.Number({ minimum: 0, maximum: 3650 })),
+          })
+        ),
+      }),
+    }
   )
 
   .get(
@@ -133,6 +173,8 @@ export const workspaceRoutes = new Elysia({ prefix: "/v1/workspaces" })
       assertRoleAtLeast(mem.role, "admin");
 
       const tokens: { email: string; token: string }[] = [];
+      const ws = await col.workspaces().findOne({ _id: wsId });
+      const inviter = await col.users().findOne({ _id: auth.userId });
       for (const email of body.emails) {
         const token = randomToken(24);
         await col.invites().insertOne({
@@ -146,6 +188,14 @@ export const workspaceRoutes = new Elysia({ prefix: "/v1/workspaces" })
           createdAt: new Date(),
         });
         tokens.push({ email, token });
+        // Fire off email (best-effort; no-op if SMTP unconfigured).
+        const inviteUrl = `${env.FRONTEND_ORIGIN}/invite/${token}`;
+        void sendInviteEmail({
+          to: email,
+          workspaceName: ws?.name ?? "Dev Thriller workspace",
+          inviteUrl,
+          inviterName: inviter?.name ?? "A teammate",
+        }).catch(() => {});
       }
       await writeAudit({
         workspaceId: wsId,

@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { Routes, navigate, useGlobalLinkIntercept, useLocation } from "@/router";
 import { LoginScreen } from "@/modules/auth/LoginScreen";
 import { SignupScreen } from "@/modules/auth/SignupScreen";
+import { ForgotPasswordScreen } from "@/modules/auth/ForgotPasswordScreen";
+import { ResetPasswordScreen } from "@/modules/auth/ResetPasswordScreen";
 import { Shell } from "@/modules/shell/Shell";
 import { Dashboard } from "@/modules/dashboard/Dashboard";
 import { ChatView } from "@/modules/chat/ChatView";
@@ -109,6 +111,15 @@ export function App() {
               </RedirectIfAuthed>
             ),
           },
+          {
+            path: "/forgot-password",
+            element: () => (
+              <RedirectIfAuthed>
+                <ForgotPasswordScreen />
+              </RedirectIfAuthed>
+            ),
+          },
+          { path: "/reset-password", element: () => <ResetPasswordScreen /> },
           {
             path: "/onboarding",
             element: () => (

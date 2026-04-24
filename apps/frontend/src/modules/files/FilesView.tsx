@@ -4,8 +4,9 @@
 // the PRD target of a unified search-first files experience.
 
 import { useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fileApi, searchApi } from "@/api/endpoints";
+import { fileVersionApi, shareLinkApi } from "@/api/adminApi";
 import { useSession } from "@/store/session";
 import { useUploads, formatBytes } from "@/lib/upload";
 import { Icon } from "@/components/Icons";
@@ -32,6 +33,34 @@ export function FilesView() {
     queryKey: ["file", selectedId],
     queryFn: () => fileApi.get(selectedId!),
     enabled: Boolean(selectedId),
+  });
+  const versionsQuery = useQuery({
+    queryKey: ["file-versions", selectedId],
+    queryFn: () => fileVersionApi.list(selectedId!),
+    enabled: Boolean(selectedId),
+  });
+  const sharesQuery = useQuery({
+    queryKey: ["file-shares", selectedId],
+    queryFn: () => shareLinkApi.list(selectedId!),
+    enabled: Boolean(selectedId),
+  });
+  const qc = useQueryClient();
+  const createShare = useMutation({
+    mutationFn: (visibility: "public" | "workspace" | "restricted") => shareLinkApi.create(selectedId!, { visibility }),
+    onSuccess: (r) => {
+      void navigator.clipboard.writeText(r.url);
+      toast("Share link created + copied");
+      qc.invalidateQueries({ queryKey: ["file-shares", selectedId] });
+    },
+    onError: (e) => toast((e as Error).message, "error"),
+  });
+  const revokeShare = useMutation({
+    mutationFn: (token: string) => shareLinkApi.revoke(token),
+    onSuccess: () => {
+      toast("Share link revoked");
+      qc.invalidateQueries({ queryKey: ["file-shares", selectedId] });
+    },
+    onError: (e) => toast((e as Error).message, "error"),
   });
 
   const uploadingJobs = useMemo(() => Object.values(jobs).filter((j) => j.workspaceId === activeWs), [jobs, activeWs]);
@@ -295,6 +324,69 @@ export function FilesView() {
               >
                 <Icon.link size={14} />
               </button>
+            </div>
+
+            {/* Versions */}
+            <div style={{ marginTop: 22 }}>
+              <div className="caseno" style={{ marginBottom: 6 }}>
+                VERSIONS · {versionsQuery.data?.items.length ?? 0}
+              </div>
+              <div style={{ display: "grid", gap: 6 }}>
+                {versionsQuery.data?.items.map((v) => (
+                  <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                    <span className="caseno" style={{ width: 38 }}>
+                      v{v.version}
+                    </span>
+                    <span style={{ flex: 1, fontFamily: "var(--font-mono)", color: "var(--fg3)" }}>
+                      {v.checksum.slice(0, 10)}…
+                    </span>
+                    <span style={{ color: "var(--fg3)" }}>{formatBytes(v.sizeBytes)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Share links */}
+            <div style={{ marginTop: 22 }}>
+              <div className="caseno" style={{ marginBottom: 6, display: "flex", alignItems: "center" }}>
+                <span>SHARE LINKS · {sharesQuery.data?.items.length ?? 0}</span>
+                <div style={{ flex: 1 }} />
+                <button
+                  className="btn btn-ghost"
+                  style={{ padding: "2px 6px", fontSize: 10 }}
+                  onClick={() => createShare.mutate("workspace")}
+                  disabled={createShare.isPending}
+                >
+                  + Create
+                </button>
+              </div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {sharesQuery.data?.items.map((s) => (
+                  <div key={s.id} style={{ padding: 8, border: "1px solid var(--border-soft)", borderRadius: 6, fontSize: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span className="chip">
+                        <span className="dot" />
+                        {s.visibility.toUpperCase()}
+                      </span>
+                      <div style={{ flex: 1 }} />
+                      <button
+                        className="tb-btn"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(s.url);
+                          toast("Copied");
+                        }}
+                      >
+                        <Icon.copy size={12} />
+                      </button>
+                      <button className="tb-btn" style={{ color: "var(--blood-700)" }} onClick={() => revokeShare.mutate(s.token)}>
+                        <Icon.trash size={12} />
+                      </button>
+                    </div>
+                    <div style={{ marginTop: 4, fontFamily: "var(--font-mono)", color: "var(--fg3)", wordBreak: "break-all" }}>{s.url}</div>
+                  </div>
+                ))}
+                {(sharesQuery.data?.items.length ?? 0) === 0 && <div className="hint">No active share links.</div>}
+              </div>
             </div>
           </div>
         )}

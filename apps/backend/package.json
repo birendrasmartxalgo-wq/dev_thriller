@@ -20,12 +20,14 @@
     "elysia": "^1.1.25",
     "ioredis": "^5.4.1",
     "mongodb": "^6.10.0",
+    "nodemailer": "^6.9.16",
     "pino": "^9.5.0",
     "pino-pretty": "^11.3.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/bun": "^1.1.13",
+    "@types/nodemailer": "^6.4.16",
     "bun-types": "^1.1.34",
     "typescript": "^5.6.3"
   }

@@ -82,9 +82,7 @@ export function LoginScreen() {
               minLength={8}
             />
             <div className="hint">
-              <a href="#" onClick={(e) => e.preventDefault()}>
-                Forgot password?
-              </a>
+              <Link to="/forgot-password">Forgot password?</Link>
             </div>
           </div>
           <button

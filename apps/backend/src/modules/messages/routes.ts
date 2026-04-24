@@ -8,6 +8,7 @@ import { writeAudit } from "@/lib/audit";
 import { decodeCursor, encodeCursor } from "../chats/routes";
 import { publishChat } from "@/ws/bus";
 import { notify } from "@/lib/notify";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import type { MessageAttachment, MessageDoc } from "@/db/types";
 
 function oid(s: string) {
@@ -138,6 +139,11 @@ export const messageRoutes = new Elysia({ prefix: "/v1" })
     "/chats/:id/messages",
     async ({ auth, params, body }) => {
       requireAuth(auth);
+      await enforceRateLimit(`${auth.userId.toHexString()}:${params.id}`, {
+        bucket: "msg:send",
+        limit: 120,
+        windowSec: 60,
+      });
       const chatId = oid(params.id);
       const chat = await col.chats().findOne({ _id: chatId });
       if (!chat) throw Errors.notFound("Chat");

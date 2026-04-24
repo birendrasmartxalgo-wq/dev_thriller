@@ -1,0 +1,73 @@
+# CronJobs for the three maintenance workers.
+# Reuses the backend image — the workers live under apps/workers but depend on @dt/backend.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: retention
+  namespace: dev-thriller
+spec:
+  schedule: "0 3 * * *" # 03:00 UTC daily
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: retention
+              image: ghcr.io/YOUR_ORG/dt-backend:latest
+              command: ["bun", "run", "/app/apps/workers/src/retention.ts", "--apply"]
+              envFrom:
+                - secretRef: { name: dt-secrets }
+              env:
+                - name: REDIS_URL
+                  value: "redis://dragonfly.dev-thriller.svc.cluster.local:6379"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: audit-verify
+  namespace: dev-thriller
+spec:
+  schedule: "0 4 * * *" # 04:00 UTC daily
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: audit-verify
+              image: ghcr.io/YOUR_ORG/dt-backend:latest
+              command: ["bun", "run", "/app/apps/workers/src/audit-verify.ts"]
+              envFrom:
+                - secretRef: { name: dt-secrets }
+              env:
+                - name: REDIS_URL
+                  value: "redis://dragonfly.dev-thriller.svc.cluster.local:6379"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: media-extract
+  namespace: dev-thriller
+spec:
+  schedule: "15 5 * * *" # 05:15 UTC daily (backfill missing rows)
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: media-extract
+              image: ghcr.io/YOUR_ORG/dt-backend:latest
+              command: ["bun", "run", "/app/apps/workers/src/media-extract.ts"]
+              envFrom:
+                - secretRef: { name: dt-secrets }
+              env:
+                - name: REDIS_URL
+                  value: "redis://dragonfly.dev-thriller.svc.cluster.local:6379"

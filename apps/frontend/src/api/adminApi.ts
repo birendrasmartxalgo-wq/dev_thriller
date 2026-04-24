@@ -44,6 +44,70 @@ export interface NotificationItem {
   createdAt: string;
 }
 
+export interface SessionItem {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  userAgent: string | null;
+  ip: string | null;
+}
+
+export const userApi = {
+  patchMe: (body: Partial<{ name: string; timezone: string; status: string; pronouns: string; notifPrefs: Record<string, boolean> }>) =>
+    api.patch<{ ok: true }>("/v1/users/me", body),
+  changePassword: (body: { currentPassword: string; newPassword: string }) =>
+    api.post<{ ok: true }>("/v1/users/me/password", body),
+  sessions: () => api.get<{ items: SessionItem[] }>("/v1/auth/sessions"),
+  revokeSession: (id: string) => api.delete<{ ok: true }>(`/v1/auth/sessions/${id}`),
+  revokeAllSessions: () => api.post<{ ok: true; count: number }>("/v1/auth/sessions/revoke-all"),
+};
+
+export const passwordResetApi = {
+  request: (email: string) => api.post<{ ok: true }>("/v1/auth/password/reset-request", { email }),
+  confirm: (body: { token: string; newPassword: string }) => api.post<{ ok: true }>("/v1/auth/password/reset", body),
+};
+
+export const workspaceAdminApi = {
+  patch: (id: string, body: Partial<{ name: string; retention: { messagesDays?: number; filesDays?: number } }>) =>
+    api.patch<{ ok: true }>(`/v1/workspaces/${id}`, body),
+};
+
+export interface SavedSearch {
+  id: string;
+  name: string;
+  query: string;
+  createdAt: string;
+}
+export const savedSearchApi = {
+  list: (workspaceId: string) =>
+    api.get<{ items: SavedSearch[] }>(`/v1/search/saved?workspaceId=${encodeURIComponent(workspaceId)}`),
+  create: (body: { workspaceId: string; name: string; query: string }) =>
+    api.post<{ id: string }>("/v1/search/saved", body),
+  remove: (id: string) => api.delete<{ ok: true }>(`/v1/search/saved/${id}`),
+};
+
+export interface ShareLink {
+  id: string;
+  token: string;
+  visibility: "public" | "workspace" | "restricted";
+  url: string;
+  expiresAt: string | null;
+  createdAt: string;
+}
+export const shareLinkApi = {
+  list: (fileId: string) => api.get<{ items: ShareLink[] }>(`/v1/files/${fileId}/shares`),
+  create: (fileId: string, body: { visibility: "public" | "workspace" | "restricted"; expiresAt?: string }) =>
+    api.post<{ url: string; token: string }>(`/v1/files/${fileId}/share`, body),
+  revoke: (token: string) => api.delete<{ ok: true }>(`/v1/shares/${token}`),
+};
+
+export const fileVersionApi = {
+  list: (fileId: string) =>
+    api.get<{ items: { id: string; version: number; sizeBytes: number; checksum: string; createdBy: string; createdAt: string }[] }>(
+      `/v1/files/${fileId}/versions`
+    ),
+};
+
 export const notificationApi = {
   list: (q: { workspaceId?: string; kind?: string; unread?: boolean; limit?: number } = {}) => {
     const sp = new URLSearchParams();

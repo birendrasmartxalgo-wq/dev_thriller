@@ -20,6 +20,25 @@ export interface UserDoc {
   createdAt: Date;
   lastSeenAt?: Date;
   deletedAt?: Date;
+
+  // Optional profile extras.
+  timezone?: string;
+  status?: string;
+  pronouns?: string;
+
+  // Notification preferences (mapped to the toggles in SettingsView).
+  notifPrefs?: {
+    mentions?: boolean;
+    all?: boolean;
+    dm?: boolean;
+    digest?: boolean;
+    push?: boolean;
+  };
+}
+
+export interface WorkspaceRetention {
+  messagesDays?: number;
+  filesDays?: number;
 }
 
 export interface WorkspaceDoc {
@@ -31,6 +50,7 @@ export interface WorkspaceDoc {
   caseNumber: string; // e.g. "0142"
   createdAt: Date;
   deletedAt?: Date;
+  retention?: WorkspaceRetention;
 }
 
 export interface MembershipDoc {

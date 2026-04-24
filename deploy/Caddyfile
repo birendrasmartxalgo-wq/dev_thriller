@@ -1,0 +1,20 @@
+# Caddy in front of the frontend container — auto-provisions TLS via Let's Encrypt.
+# Drop this next to docker-compose.prod.yml and add a `caddy:` service pointing at it.
+#
+# Replace app.example.com with your real domain.
+
+app.example.com {
+  encode zstd gzip
+
+  # Security headers — complement the nginx ones inside the frontend image.
+  header {
+    Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+    X-Content-Type-Options nosniff
+    Referrer-Policy strict-origin-when-cross-origin
+  }
+
+  reverse_proxy frontend:80 {
+    header_up X-Forwarded-Proto {scheme}
+    header_up X-Real-IP {remote}
+  }
+}

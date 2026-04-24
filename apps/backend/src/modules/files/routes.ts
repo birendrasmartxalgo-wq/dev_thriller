@@ -16,6 +16,7 @@ import {
 import { emptyBitmap, getBit, missingBits, setBit } from "@/lib/bitmap";
 import { randomToken } from "@/lib/hash";
 import { writeAudit } from "@/lib/audit";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { env, r2Configured } from "@/config/env";
 
 const CHUNK_SIZE = 8 * 1024 * 1024; // 8 MB
@@ -33,6 +34,7 @@ export const fileRoutes = new Elysia({ prefix: "/v1" })
     "/uploads",
     async ({ auth, body }) => {
       requireAuth(auth);
+      await enforceRateLimit(auth.userId.toHexString(), { bucket: "upload:init", limit: 60, windowSec: 3600 });
       if (!r2Configured) throw Errors.internal("File storage not configured");
       const wsId = oid(body.workspaceId);
       const mem = await getMembership(wsId, auth.userId);
@@ -226,6 +228,30 @@ export const fileRoutes = new Elysia({ prefix: "/v1" })
     { params: t.Object({ id: t.String() }) }
   )
 
+  .get(
+    "/files/:id/versions",
+    async ({ auth, params }) => {
+      requireAuth(auth);
+      const id = oid(params.id);
+      const f = await col.files().findOne({ _id: id, deletedAt: { $exists: false } });
+      if (!f) throw Errors.notFound("File");
+      const mem = await getMembership(f.workspaceId, auth.userId);
+      if (!mem) throw Errors.forbidden();
+      const items = await col.fileVersions().find({ fileId: id }).sort({ version: -1 }).toArray();
+      return {
+        items: items.map((v) => ({
+          id: v._id.toHexString(),
+          version: v.version,
+          sizeBytes: v.sizeBytes,
+          checksum: v.checksum,
+          createdBy: v.createdBy.toHexString(),
+          createdAt: v.createdAt,
+        })),
+      };
+    },
+    { params: t.Object({ id: t.String() }) }
+  )
+
   .patch(
     "/files/:id",
     async ({ auth, params, body }) => {
@@ -264,6 +290,55 @@ export const fileRoutes = new Elysia({ prefix: "/v1" })
       return { ok: true };
     },
     { params: t.Object({ id: t.String() }) }
+  )
+
+  .get(
+    "/files/:id/shares",
+    async ({ auth, params }) => {
+      requireAuth(auth);
+      const id = oid(params.id);
+      const f = await col.files().findOne({ _id: id, deletedAt: { $exists: false } });
+      if (!f) throw Errors.notFound("File");
+      const mem = await getMembership(f.workspaceId, auth.userId);
+      if (!mem) throw Errors.forbidden();
+      const items = await col
+        .shareLinks()
+        .find({ resourceType: "file", resourceId: id, revokedAt: { $exists: false } })
+        .sort({ createdAt: -1 })
+        .toArray();
+      return {
+        items: items.map((s) => ({
+          id: s._id.toHexString(),
+          token: s.token,
+          visibility: s.visibility,
+          url: `${env.FRONTEND_ORIGIN}/s/${s.token}`,
+          expiresAt: s.expiresAt ?? null,
+          createdAt: s.createdAt,
+        })),
+      };
+    },
+    { params: t.Object({ id: t.String() }) }
+  )
+
+  .delete(
+    "/shares/:token",
+    async ({ auth, params }) => {
+      requireAuth(auth);
+      const link = await col.shareLinks().findOne({ token: params.token });
+      if (!link) throw Errors.notFound("Share link");
+      const mem = await getMembership(link.workspaceId, auth.userId);
+      if (!mem) throw Errors.forbidden();
+      await col.shareLinks().updateOne({ _id: link._id }, { $set: { revokedAt: new Date() } });
+      await writeAudit({
+        workspaceId: link.workspaceId,
+        actorId: auth.userId,
+        verb: "file.share_revoke",
+        objectType: "file",
+        objectId: link.resourceId,
+      });
+      return { ok: true };
+    },
+    { params: t.Object({ token: t.String() }) }
   )
 
   .post(
