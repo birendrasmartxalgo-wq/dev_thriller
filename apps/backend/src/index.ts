@@ -8,8 +8,10 @@ import { ensureIndexes } from "@/db/indexes";
 import { connectDragonfly, redis } from "@/db/dragonfly";
 import { errorPlugin } from "@/middleware/errors";
 import { applySecurity } from "@/middleware/security";
+import { accessLogPlugin } from "@/middleware/accessLog";
 import { subscribeAclInvalidation } from "@/lib/acl";
 import { startPubSub } from "@/ws/bus";
+import { summarizeProm } from "@/lib/metrics";
 
 import { authRoutes } from "@/modules/auth/routes";
 import { passwordResetRoutes } from "@/modules/auth/passwordReset";
@@ -40,6 +42,9 @@ export function buildApp() {
       })
     )
     .use(applySecurity)
+    // Access log + metrics recorder. After security so X-Request-Id is set;
+    // before route modules so we capture errors and 404s too.
+    .use(accessLogPlugin)
     .use(
       swagger({
         path: "/docs",
@@ -72,6 +77,12 @@ export function buildApp() {
         status: ready ? 200 : 503,
         headers: { "content-type": "application/json" },
       });
+    })
+    // FUTURE: lock this behind an internal scrape token / network policy.
+    // Hand-rolled Prometheus exposition; the canonical view is /v1/admin/metrics.
+    .get("/metrics", async ({ set }) => {
+      set.headers["content-type"] = "text/plain; version=0.0.4";
+      return summarizeProm();
     })
     .use(authRoutes)
     .use(passwordResetRoutes)

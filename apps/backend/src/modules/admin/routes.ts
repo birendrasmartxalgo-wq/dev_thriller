@@ -6,6 +6,7 @@ import { Errors } from "@/lib/errors";
 import { assertRoleAtLeast, getMembership } from "@/lib/acl";
 import { sha256Hex } from "@/lib/hash";
 import { writeAudit } from "@/lib/audit";
+import { summarize } from "@/lib/metrics";
 
 function oid(s: string) {
   if (!ObjectId.isValid(s)) throw Errors.badRequest("bad_id", "Invalid id");
@@ -21,6 +22,20 @@ async function requireAdmin(userId: ObjectId, workspaceId: ObjectId) {
 
 export const adminRoutes = new Elysia({ prefix: "/v1/admin" })
   .use(authPlugin)
+
+  // In-memory metrics snapshot. Admin-only, scoped per workspace by ACL — but
+  // metrics themselves are process-global (not per-workspace), so any admin can
+  // see the whole node's view. Acceptable trade-off for v1.
+  .get(
+    "/metrics",
+    async ({ auth, query }) => {
+      requireAuth(auth);
+      const wsId = oid(query.workspaceId);
+      await requireAdmin(auth.userId, wsId);
+      return await summarize();
+    },
+    { query: t.Object({ workspaceId: t.String() }) }
+  )
 
   .get(
     "/audit",
