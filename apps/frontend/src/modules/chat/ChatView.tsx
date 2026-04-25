@@ -29,6 +29,13 @@ import { MessageSkeleton } from "@/components/Skeletons";
 
 const PAGE = 50;
 const REPLAY_CURSOR_KEY = (chatId: string) => `dt.replay.${chatId}`;
+const TYPING_DEBOUNCE_MS = 600;     // composer keystroke debounce before publishing
+const TYPING_STOP_MS = 3_000;       // after this long without typing we stop publishing
+const TYPING_DISPLAY_MS = 4_000;    // peer indicator clears after this
+const READ_DEBOUNCE_MS = 1_500;     // settle period before we send markRead
+
+type ReadStateMap = Record<string, { lastReadMessageId: string | null; lastReadAt: string }>;
+type TypingMap = Record<string, { name: string; until: number }>;
 
 function renderBodyWithMentions(body: string, memberMap: Map<string, string>) {
   // Split on @id (hex) and @name tokens — render any capture as a chip.
@@ -76,10 +83,24 @@ export function ChatView() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [presence, setPresence] = useState<Record<string, PresenceStatus>>({});
+  const [readState, setReadState] = useState<ReadStateMap>({});
+  const [typing, setTyping] = useState<TypingMap>({});
+  // Replies for the currently-open thread, keyed by parent id. Fetched on demand
+  // because the main feed query now excludes thread replies (backend default).
+  const [threadReplies, setThreadReplies] = useState<MessagePublic[]>([]);
+  // Reply-count + last-reply-at per parent message, refreshed via thread.update WS events.
+  const [threadCounts, setThreadCounts] = useState<Record<string, { count: number; lastReplyAt: string | null }>>({});
   const virtuoso = useRef<VirtuosoHandle>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  // Typing publish state: when set, composer keystroke debounce hasn't fired yet.
+  const typingDebounceRef = useRef<number | null>(null);
+  const typingStopRef = useRef<number | null>(null);
+  const typingActiveRef = useRef(false);
+  // Mark-read debounce: send markRead at most every READ_DEBOUNCE_MS for the bottom-visible message.
+  const readDebounceRef = useRef<number | null>(null);
+  const lastReadSentRef = useRef<string | null>(null);
   const qc = useQueryClient();
 
   const chatQuery = useQuery({
@@ -155,6 +176,61 @@ export function ChatView() {
     };
   }, [chatId]);
 
+  // Initial read-state load — peers' lastReadMessageId for "Seen by" footers.
+  useEffect(() => {
+    let cancelled = false;
+    chatApi
+      .readState(chatId)
+      .then((r) => {
+        if (cancelled) return;
+        const next: ReadStateMap = {};
+        for (const [uid, v] of Object.entries(r.items)) {
+          if (uid !== user?.id) next[uid] = v;
+        }
+        setReadState(next);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [chatId, user?.id]);
+
+  // Typing-indicator GC: every 1s drop entries whose `until` is in the past.
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      const now = Date.now();
+      setTyping((prev) => {
+        let changed = false;
+        const next: TypingMap = {};
+        for (const [uid, v] of Object.entries(prev)) {
+          if (v.until > now) next[uid] = v;
+          else changed = true;
+        }
+        return changed ? next : prev;
+      });
+    }, 1_000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  // Thread replies fetcher: when openThreadFor changes, fetch parent + replies
+  // via the dedicated parentId query (main feed excludes thread replies).
+  useEffect(() => {
+    if (!openThreadFor) {
+      setThreadReplies([]);
+      return;
+    }
+    let cancelled = false;
+    void messageApi
+      .page(chatId, { parentId: openThreadFor, limit: 100 })
+      .then((page) => {
+        if (!cancelled) setThreadReplies(page.items.filter((x) => x.parentId === openThreadFor));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [chatId, openThreadFor]);
+
   // Pinned strip.
   const pinnedQuery = useQuery({
     queryKey: ["chat-pinned", chatId],
@@ -201,6 +277,26 @@ export function ChatView() {
         } else if (p?.type === "chat.deleted" && p.id === chatId) {
           toast("This chat was deleted");
           navigate("/");
+        } else if (p?.type === "typing" && p.chatId === chatId && p.userId !== user?.id) {
+          // Peer reports they're typing; show until `until` (server-set ~now+4s).
+          setTyping((prev) => ({ ...prev, [p.userId]: { name: String(p.name ?? p.userId.slice(-4)), until: Number(p.until) } }));
+        } else if (p?.type === "read.update" && p.chatId === chatId && p.userId !== user?.id) {
+          setReadState((prev) => ({
+            ...prev,
+            [p.userId]: { lastReadMessageId: p.lastReadMessageId ?? null, lastReadAt: String(p.lastReadAt) },
+          }));
+        } else if (p?.type === "thread.update" && p.chatId === chatId) {
+          setThreadCounts((prev) => ({
+            ...prev,
+            [String(p.parentId)]: { count: Number(p.replyCount ?? 0), lastReplyAt: p.lastReplyAt ?? null },
+          }));
+          // If the thread is open and this update is for it, refetch replies.
+          if (openThreadFor === p.parentId) {
+            void messageApi
+              .page(chatId, { parentId: p.parentId, limit: 100 })
+              .then((page) => setThreadReplies(page.items.filter((x) => x.parentId === p.parentId)))
+              .catch(() => {});
+          }
         }
       } catch {
         /* ignore */
@@ -394,8 +490,49 @@ export function ChatView() {
 
   const composerRect = composerRef.current?.getBoundingClientRect() ?? null;
 
+  // Publish a typing event over the WS, debounced. Stops auto-publishing after
+  // TYPING_STOP_MS of silence so we don't keep flooding the bus.
+  function publishTyping() {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (typingDebounceRef.current) return; // already in a debounce window
+    typingDebounceRef.current = window.setTimeout(() => {
+      typingDebounceRef.current = null;
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "typing", chat: chatId }));
+        typingActiveRef.current = true;
+      }
+    }, TYPING_DEBOUNCE_MS);
+    if (typingStopRef.current) window.clearTimeout(typingStopRef.current);
+    typingStopRef.current = window.setTimeout(() => {
+      typingActiveRef.current = false;
+      typingStopRef.current = null;
+    }, TYPING_STOP_MS);
+  }
+
+  // Debounced mark-read for the bottom-most visible message. The Virtuoso
+  // `endReached` + `atBottomStateChange` callbacks both feed this; the latest
+  // message id wins via lastReadSentRef.
+  function scheduleMarkRead(messageId: string) {
+    if (!messageId || messageId === lastReadSentRef.current) return;
+    if (readDebounceRef.current) window.clearTimeout(readDebounceRef.current);
+    readDebounceRef.current = window.setTimeout(() => {
+      readDebounceRef.current = null;
+      if (messageId === lastReadSentRef.current) return;
+      lastReadSentRef.current = messageId;
+      void chatApi.markRead(chatId, { messageId }).catch(() => {});
+    }, READ_DEBOUNCE_MS);
+  }
+
+  // Active typing peers (excluding self), filtered to non-stale entries.
+  const typingNames = useMemo(() => {
+    const now = Date.now();
+    return Object.entries(typing)
+      .filter(([uid, v]) => uid !== user?.id && v.until > now)
+      .map(([, v]) => v.name);
+  }, [typing, user?.id]);
+
   const threadMessage = openThreadFor ? messages.find((m) => m.id === openThreadFor) ?? null : null;
-  const threadReplies = openThreadFor ? messages.filter((m) => m.parentId === openThreadFor) : [];
 
   const chat = chatQuery.data;
   const workspaces = useSession((s) => s.workspaces);
@@ -410,8 +547,20 @@ export function ChatView() {
     if (!m) return null;
     const author = memberById.get(m.authorId);
     const mine = m.authorId === user?.id;
-    const replies = messages.filter((r) => r.parentId === m.id).length;
+    // Reply counts come from thread.update WS events. The main feed excludes
+    // thread replies (backend default), so we can't derive count from `messages`.
+    const replies = threadCounts[m.id]?.count ?? 0;
     const isHighlighted = highlightId === m.id;
+    // Seen-by: peers whose lastReadMessageId ranks at or after this message's id.
+    // We only render this footer on the latest 5 messages of the chat to avoid
+    // a wall of avatars; that's a reasonable trade-off (Slack does the same).
+    const isInLatest5 = index >= messages.length - 5;
+    const seenBy = isInLatest5
+      ? Object.entries(readState)
+          .filter(([uid, v]) => uid !== user?.id && v.lastReadAt >= (m.createdAt as unknown as string))
+          .map(([uid]) => memberById.get(uid))
+          .filter((x): x is { name: string; color: string; initials: string } => Boolean(x))
+      : [];
     return (
       <div
         style={{
@@ -486,9 +635,23 @@ export function ChatView() {
                 <span className="caseno" style={{ marginLeft: "auto" }}>⏎ save · esc cancel</span>
               </div>
             </form>
+          ) : m.deletedAt ? (
+            <div
+              className="dt-tombstone"
+              style={{
+                font: "italic 400 13px/1.5 var(--font-sans)",
+                color: "var(--fg4)",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <Icon.x size={12} aria-hidden="true" />
+              <span>this message was cut · {new Date(m.deletedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+            </div>
           ) : (
             <div style={{ font: "400 13px/1.5 var(--font-sans)", color: "var(--fg1)" }}>
-              {m.deletedAt ? <em style={{ color: "var(--fg3)" }}>Message removed.</em> : renderBodyWithMentions(m.body, memberNameById)}
+              {renderBodyWithMentions(m.body, memberNameById)}
             </div>
           )}
 
@@ -539,6 +702,31 @@ export function ChatView() {
             </div>
           )}
 
+          {seenBy.length > 0 && !m.deletedAt && (
+            <div
+              className="dt-seen-by"
+              aria-label={`Seen by ${seenBy.map((s) => s.name).join(", ")}`}
+              style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4, color: "var(--fg3)", font: "400 11px/1 var(--font-mono)" }}
+            >
+              <div style={{ display: "flex", marginRight: 4 }}>
+                {seenBy.slice(0, 3).map((s, i) => (
+                  <div
+                    key={i}
+                    className="av"
+                    style={{ width: 14, height: 14, fontSize: 8, background: s.color, marginLeft: i === 0 ? 0 : -4, border: "1px solid var(--paper-0)" }}
+                    aria-hidden="true"
+                  >
+                    {s.initials}
+                  </div>
+                ))}
+              </div>
+              <span>
+                Seen by {seenBy.slice(0, 2).map((s) => s.name).join(", ")}
+                {seenBy.length > 2 ? ` +${seenBy.length - 2}` : ""}
+              </span>
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: 8, marginTop: 4, fontSize: 11, color: "var(--fg3)" }}>
             {replies > 0 && (
               <button
@@ -546,7 +734,7 @@ export function ChatView() {
                 style={{ padding: "2px 6px", fontSize: 11 }}
                 onClick={() => setOpenThreadFor(m.id)}
               >
-                {replies} repl{replies === 1 ? "y" : "ies"} · View thread →
+                🧵 {replies} repl{replies === 1 ? "y" : "ies"}
               </button>
             )}
             {!m.deletedAt && (
@@ -700,6 +888,16 @@ export function ChatView() {
             itemContent={(idx) => renderRow(idx)}
             followOutput="smooth"
             startReached={loadMore}
+            atBottomStateChange={(atBottom) => {
+              if (atBottom && messages.length > 0) {
+                const last = messages[messages.length - 1];
+                if (last) scheduleMarkRead(last.id);
+              }
+            }}
+            endReached={() => {
+              const last = messages[messages.length - 1];
+              if (last) scheduleMarkRead(last.id);
+            }}
             components={{
               Header: () =>
                 hasMore ? (
@@ -740,6 +938,30 @@ export function ChatView() {
               ))}
             </div>
           )}
+          {typingNames.length > 0 && (
+            <div
+              aria-live="polite"
+              style={{
+                font: "400 11px/1 var(--font-mono)",
+                color: "var(--fg3)",
+                padding: "0 4px 6px",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <span className="dt-typing-dots" aria-hidden="true">
+                <span /><span /><span />
+              </span>
+              <span>
+                {typingNames.length === 1
+                  ? `${typingNames[0]} is typing…`
+                  : typingNames.length === 2
+                  ? `${typingNames[0]} and ${typingNames[1]} are typing…`
+                  : `${typingNames.length} people are typing…`}
+              </span>
+            </div>
+          )}
           <form onSubmit={send} style={{ border: "1px solid var(--border)", borderRadius: 10, background: "var(--paper-0)" }}>
             <textarea
               ref={composerRef}
@@ -750,6 +972,7 @@ export function ChatView() {
                 setDraft(e.target.value);
                 // Defer to next tick so selectionStart reflects the new value.
                 requestAnimationFrame(updateMentionFromCaret);
+                publishTyping();
               }}
               onKeyUp={updateMentionFromCaret}
               onClick={updateMentionFromCaret}

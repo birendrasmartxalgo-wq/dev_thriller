@@ -170,3 +170,30 @@
     background: var(--paper-0);
   }
 }
+
+/* Typing indicator — three pulsing dots in mono color. */
+.dt-typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.dt-typing-dots span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--fg3);
+  animation: dt-typing 1.2s infinite ease-in-out;
+}
+.dt-typing-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.dt-typing-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes dt-typing {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dt-typing-dots span { animation: none; opacity: 0.7; }
+}
