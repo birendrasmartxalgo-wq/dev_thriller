@@ -6,11 +6,13 @@ import { Link } from "@/router";
 import { PresenceDot } from "@/components/PresenceDot";
 import { Icon } from "@/components/Icons";
 import { RowSkeleton } from "@/components/Skeletons";
+import { InviteDialog } from "@/modules/shell/InviteDialog";
 
 export function Dashboard() {
   const user = useSession((s) => s.user);
   const active = useSession((s) => s.activeWorkspaceId);
   const [showArchived, setShowArchived] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   const membersQuery = useQuery({
     queryKey: ["members", active],
@@ -41,6 +43,18 @@ export function Dashboard() {
           <h1>Good morning, {user?.name ?? "detective"}.</h1>
           <div className="sub">Welcome back. The chain is intact.</div>
         </div>
+        {active && (
+          <div style={{ marginLeft: "auto" }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setInviteOpen(true)}
+              data-testid="open-invite"
+            >
+              <Icon.plus size={14} /> Invite to case
+            </button>
+          </div>
+        )}
       </div>
       <div className="page-body dt-dashboard-grid" style={{ display: "grid", gap: 14, gridTemplateColumns: "1fr 1fr" }}>
         <div className="card">
@@ -132,6 +146,10 @@ export function Dashboard() {
           )}
         </div>
       </div>
+
+      {inviteOpen && active && (
+        <InviteDialog workspaceId={active} onClose={() => setInviteOpen(false)} />
+      )}
     </div>
   );
 }

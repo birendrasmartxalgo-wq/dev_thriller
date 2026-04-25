@@ -31,7 +31,7 @@ export const adminApi = {
     if (q.to !== undefined) query.to = q.to;
     if (q.limit !== undefined) query.limit = q.limit;
     const r = await eden.v1.admin.audit.get({ query: query as never });
-    return unwrap(r) as unknown as { items: AuditItem[] };
+    return unwrap(r) as { items: AuditItem[] };
   },
   auditVerify: async (workspaceId: string): Promise<{ ok: boolean; brokenAt: string | null }> => {
     const r = await eden.v1.admin.audit.verify.get({ query: { workspaceId } });
@@ -53,7 +53,7 @@ export const adminApi = {
     items: { userId: string; email: string | null; name: string | null; role: string; status: string; lastSeenAt: string | null }[];
   }> => {
     const r = await eden.v1.admin.users.get({ query: { workspaceId } });
-    return unwrap(r) as unknown as {
+    return unwrap(r) as {
       items: { userId: string; email: string | null; name: string | null; role: string; status: string; lastSeenAt: string | null }[];
     };
   },
@@ -99,7 +99,7 @@ export const userApi = {
   },
   sessions: async (): Promise<{ items: SessionItem[] }> => {
     const r = await eden.v1.auth.sessions.get();
-    return unwrap(r) as unknown as { items: SessionItem[] };
+    return unwrap(r) as { items: SessionItem[] };
   },
   revokeSession: async (id: string): Promise<{ ok: true }> => {
     const r = await eden.v1.auth.sessions({ id }).delete();
@@ -149,7 +149,7 @@ export interface SavedSearch {
 export const savedSearchApi = {
   list: async (workspaceId: string): Promise<{ items: SavedSearch[] }> => {
     const r = await eden.v1.search.saved.get({ query: { workspaceId } });
-    return unwrap(r) as unknown as { items: SavedSearch[] };
+    return unwrap(r) as { items: SavedSearch[] };
   },
   create: async (body: { workspaceId: string; name: string; query: string }): Promise<{ id: string }> => {
     const r = await eden.v1.search.saved.post(body);
@@ -172,7 +172,7 @@ export interface ShareLink {
 export const shareLinkApi = {
   list: async (fileId: string): Promise<{ items: ShareLink[] }> => {
     const r = await eden.v1.files({ id: fileId }).shares.get();
-    return unwrap(r) as unknown as { items: ShareLink[] };
+    return unwrap(r) as { items: ShareLink[] };
   },
   create: async (
     fileId: string,
@@ -194,7 +194,7 @@ export const fileVersionApi = {
     items: { id: string; version: number; sizeBytes: number; checksum: string; createdBy: string; createdAt: string }[];
   }> => {
     const r = await eden.v1.files({ id: fileId }).versions.get();
-    return unwrap(r) as unknown as {
+    return unwrap(r) as {
       items: { id: string; version: number; sizeBytes: number; checksum: string; createdBy: string; createdAt: string }[];
     };
   },
@@ -210,7 +210,7 @@ export const notificationApi = {
     if (q.unread !== undefined) query.unread = q.unread;
     if (q.limit !== undefined) query.limit = q.limit;
     const r = await eden.v1.notifications.get({ query: query as never });
-    return unwrap(r) as unknown as { items: NotificationItem[] };
+    return unwrap(r) as { items: NotificationItem[] };
   },
   read: async (id: string): Promise<{ ok: true }> => {
     const r = await eden.v1.notifications({ id }).read.patch();

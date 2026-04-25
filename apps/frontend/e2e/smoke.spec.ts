@@ -40,11 +40,10 @@ test.describe("smoke", () => {
     await expect(page.getByTestId("message-list").getByText(marker)).toBeVisible();
   });
 
-  // The full invite flow requires UI surfaces that don't exist yet:
-  // a `/invite/:token` signup-via-token page, a workspace-create modal, and
-  // a token display in the invite-success state. Hooked back up once those
-  // ship — see PRD §10.
-  test.skip("create workspace, invite a second user, and have them join", async ({ page, request }) => {
+  // Full invite flow: create a workspace, send an invite to a fresh email,
+  // copy the token from the invite-success modal, and have that email sign up
+  // via the /invite/:token page.
+  test("create workspace, invite a second user, and have them join", async ({ page }) => {
     await page.goto("/login");
     await page.getByTestId("login-email").fill(PRIMARY_EMAIL);
     await page.getByTestId("login-password").fill(PRIMARY_PW);

@@ -9,6 +9,7 @@ import { notificationApi } from "@/api/adminApi";
 import { useSession } from "@/store/session";
 import { Link, navigate, useLocation } from "@/router";
 import { toast } from "@/store/toast";
+import { WorkspaceCreateDialog } from "./WorkspaceCreateDialog";
 
 export function Shell({ children }: { children: ReactNode }) {
   const user = useSession((s) => s.user);
@@ -18,6 +19,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const setActiveWorkspace = useSession((s) => s.setActiveWorkspace);
   const loc = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [wsCreateOpen, setWsCreateOpen] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
   const hamburgerRef = useRef<HTMLButtonElement>(null);
 
@@ -115,17 +117,13 @@ export function Shell({ children }: { children: ReactNode }) {
     navigate("/login");
   }
 
-  async function newWorkspace() {
-    const name = window.prompt("Workspace name")?.trim();
-    if (!name) return;
-    try {
-      const r = await workspaceApi.create({ name });
-      await wsQuery.refetch();
-      setActiveWorkspace(r.id);
-      toast(`Case “${r.name}” opened`);
-    } catch (e) {
-      toast((e as Error).message, "error");
-    }
+  // Workspace creation now happens in <WorkspaceCreateDialog/>; the trigger
+  // below opens it. Kept the helper signature unused-removed to flag stale callers.
+  async function onWorkspaceCreated(r: { id: string; slug: string; name: string }) {
+    await wsQuery.refetch();
+    setActiveWorkspace(r.id);
+    setWsCreateOpen(false);
+    navigate("/");
   }
 
   async function newChannel() {
@@ -172,7 +170,7 @@ export function Shell({ children }: { children: ReactNode }) {
           style={{ border: 0, background: "transparent" }}
         >
           <div className="dot" aria-hidden="true">{activeWs?.name?.[0]?.toUpperCase() ?? "?"}</div>
-          <span>{activeWs?.name ?? "Choose a case"}</span>
+          <span data-testid="workspace-title">{activeWs?.name ?? "Choose a case"}</span>
           {activeWs && <span className="caseno">CASE · {activeWs.caseNumber}</span>}
         </button>
 
@@ -245,9 +243,10 @@ export function Shell({ children }: { children: ReactNode }) {
           <button
             className="plus"
             type="button"
-            onClick={newWorkspace}
+            onClick={() => setWsCreateOpen(true)}
             aria-label="New workspace"
             title="New workspace"
+            data-testid="create-workspace"
             style={{ border: 0, background: "transparent" }}
           >
             <Plus size={14} aria-hidden="true" />
@@ -366,6 +365,13 @@ export function Shell({ children }: { children: ReactNode }) {
       </aside>
 
       <main id="dt-main" className="main" tabIndex={-1}>{children}</main>
+
+      {wsCreateOpen && (
+        <WorkspaceCreateDialog
+          onClose={() => setWsCreateOpen(false)}
+          onCreated={onWorkspaceCreated}
+        />
+      )}
     </div>
   );
 }

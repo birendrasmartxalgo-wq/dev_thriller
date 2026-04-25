@@ -66,6 +66,7 @@ export function SignupScreen() {
               onChange={(e) => up("email", e.target.value)}
               required
               autoComplete="email"
+              data-testid="signup-email"
             />
           </div>
           <div className="field">
@@ -78,6 +79,7 @@ export function SignupScreen() {
               onChange={(e) => up("name", e.target.value)}
               required
               autoComplete="name"
+              data-testid="signup-name"
             />
           </div>
           <div className="field">
@@ -91,6 +93,7 @@ export function SignupScreen() {
               required
               minLength={8}
               autoComplete="new-password"
+              data-testid="signup-password"
             />
             <div className="hint">
               Argon2id hashed. mTLS on the wire. Read the{" "}
@@ -100,7 +103,13 @@ export function SignupScreen() {
               .
             </div>
           </div>
-          <button type="submit" className="btn btn-primary btn-lg" style={{ justifyContent: "center" }} disabled={busy}>
+          <button
+            type="submit"
+            className="btn btn-primary btn-lg"
+            style={{ justifyContent: "center" }}
+            disabled={busy}
+            data-testid="signup-submit"
+          >
             {busy ? <span className="spinner" /> : "Create account →"}
           </button>
           <div style={{ textAlign: "center", font: "400 12px/1.4 var(--font-sans)", color: "var(--fg3)" }}>
