@@ -4,6 +4,7 @@ import { LoginScreen } from "@/modules/auth/LoginScreen";
 import { SignupScreen } from "@/modules/auth/SignupScreen";
 import { ForgotPasswordScreen } from "@/modules/auth/ForgotPasswordScreen";
 import { ResetPasswordScreen } from "@/modules/auth/ResetPasswordScreen";
+import { InvitePage } from "@/modules/auth/InvitePage";
 import { Shell } from "@/modules/shell/Shell";
 import { Dashboard } from "@/modules/dashboard/Dashboard";
 import { ChatView } from "@/modules/chat/ChatView";
@@ -35,7 +36,13 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   const booted = useSession((s) => s.booted);
   const loc = useLocation();
   useEffect(() => {
-    if (booted && !user && !loc.startsWith("/login") && !loc.startsWith("/signup")) {
+    if (
+      booted &&
+      !user &&
+      !loc.startsWith("/login") &&
+      !loc.startsWith("/signup") &&
+      !loc.startsWith("/invite/")
+    ) {
       navigate("/login", true);
     }
   }, [user, booted, loc]);
@@ -137,6 +144,14 @@ export function App() {
             ),
           },
           { path: "/reset-password", element: () => <ResetPasswordScreen /> },
+          {
+            path: "/invite/:token",
+            element: () => (
+              <ErrorBoundary fallback={narrowFallback}>
+                <InvitePage />
+              </ErrorBoundary>
+            ),
+          },
           {
             path: "/onboarding",
             element: () => (

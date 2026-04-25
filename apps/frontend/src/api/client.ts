@@ -163,7 +163,13 @@ export function toError(err: unknown): ApiError {
 // Unwrap a treaty response: throw ApiError on error, return typed data on success.
 // Endpoint modules wrap every call with this so callers continue to see their
 // previous promise shape.
-export function unwrap<D, E>(resp: { data: D | null; error: E | null }): D {
+//
+// The return is typed as `unknown` so that endpoint wrappers can narrow with a
+// single `as ViewModel` assertion without needing the `as unknown as` two-step.
+// Eden's inferred response shape uses `Date` for timestamp fields (it reflects
+// what the handler returns) but JSON-on-the-wire is `string` — the hand-written
+// view models in `./types` reflect that runtime truth, hence the narrowing cast.
+export function unwrap<E>(resp: { data: unknown; error: E | null }): unknown {
   if (resp.error) throw toError(resp.error);
-  return resp.data as D;
+  return resp.data;
 }

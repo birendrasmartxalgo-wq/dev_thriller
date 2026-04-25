@@ -10,6 +10,7 @@ import { assertRoleAtLeast, getMembership, invalidateAclCache } from "@/lib/acl"
 import { randomToken } from "@/lib/hash";
 import { sendInviteEmail } from "@/lib/email";
 import { env } from "@/config/env";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 const IdParam = t.Object({ id: t.String() });
 
@@ -285,6 +286,34 @@ export const workspaceRoutes = new Elysia({ prefix: "/v1/workspaces" })
   );
 
 export const inviteRoutes = new Elysia({ prefix: "/v1/auth/invites" })
+  // Public, rate-limited preview of an invite — used by the /invite/:token signup
+  // page so it can render the workspace name and decide whether to gate behind
+  // login (existing user) or signup-via-token (new email). 30 requests/min/IP.
+  .get(
+    "/:token",
+    async ({ params, server, request }) => {
+      const ip = server?.requestIP(request)?.address ?? "0.0.0.0";
+      await enforceRateLimit(ip, { bucket: "auth:invite-peek", limit: 30, windowSec: 60 });
+
+      const invite = await col.invites().findOne({ token: params.token });
+      if (!invite) throw Errors.notFound("Invite");
+      if (invite.acceptedAt) throw Errors.notFound("Invite");
+      if (invite.expiresAt < new Date()) throw Errors.notFound("Invite");
+
+      const ws = await col.workspaces().findOne({ _id: invite.workspaceId, deletedAt: { $exists: false } });
+      if (!ws) throw Errors.notFound("Invite");
+
+      return {
+        workspaceId: invite.workspaceId.toHexString(),
+        workspaceName: ws.name,
+        email: invite.email,
+        role: invite.role,
+        expiresAt: invite.expiresAt.toISOString(),
+        accepted: false as const,
+      };
+    },
+    { params: t.Object({ token: t.String() }) }
+  )
   .use(authPlugin)
   .post(
     "/:token/accept",
