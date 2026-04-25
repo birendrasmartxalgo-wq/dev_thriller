@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/Icons";
 import { useSession } from "@/store/session";
-import { api } from "@/api/client";
 import { workspaceApi, authApi } from "@/api/endpoints";
 import { userApi, workspaceAdminApi } from "@/api/adminApi";
 import { toast } from "@/store/toast";
@@ -323,7 +322,18 @@ function WorkspaceTab() {
   const activeWs = useSession((s) => s.activeWorkspaceId)!;
   const wsDetail = useQuery({
     queryKey: ["ws-detail", activeWs],
-    queryFn: () => api.get<{ id: string; name: string; slug: string; caseNumber: string; plan: string; role: Role; retention: { messagesDays?: number; filesDays?: number } | null }>(`/v1/workspaces/${activeWs}`),
+    // workspaceApi.get returns the canonical WorkspaceDetail; the extra `retention`
+    // field is added by the backend GET /v1/workspaces/:id route. Cast once here.
+    queryFn: async () =>
+      (await workspaceApi.get(activeWs)) as unknown as {
+        id: string;
+        name: string;
+        slug: string;
+        caseNumber: string;
+        plan: string;
+        role: Role;
+        retention: { messagesDays?: number; filesDays?: number } | null;
+      },
   });
   const [name, setName] = useState("");
   const [msgDays, setMsgDays] = useState(365);
@@ -361,7 +371,10 @@ function WorkspaceTab() {
   });
 
   const changeRole = useMutation({
-    mutationFn: ({ uid, role }: { uid: string; role: Role }) => api.patch(`/v1/workspaces/${activeWs}/members/${uid}`, { role }),
+    mutationFn: ({ uid, role }: { uid: string; role: Role }) =>
+      // Owner role can't be assigned via this endpoint; backend validates and
+      // rejects. Narrow the type to satisfy the typed wrapper signature.
+      workspaceAdminApi.changeMemberRole(activeWs, uid, role as "admin" | "member" | "guest"),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["members", activeWs] }),
     onError: (e) => toast((e as Error).message, "error"),
   });

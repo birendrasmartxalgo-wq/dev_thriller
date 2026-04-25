@@ -1,6 +1,14 @@
-// Typed wrappers per resource. Thin layer over `api` — keeps call-sites terse.
+// Typed wrappers per resource. Thin layer over Eden Treaty — keeps call-sites
+// terse and preserves a stable public surface so callers in src/modules/** are
+// independent of the underlying client.
+//
+// Each function delegates to `eden.*`, which derives its types from the backend
+// `App` type. We unwrap the treaty `{ data, error }` envelope with `unwrap()` so
+// callers see a plain promise; the inferred response type is then narrowed to
+// the hand-written view-model in `./types` (Date fields are stringified on the
+// wire — Eden's static type still says Date, hence the cast).
 
-import { api, tokenStore } from "./client";
+import { eden, tokenStore, unwrap } from "./client";
 import type {
   AuthUser,
   ChatDetail,
@@ -21,122 +29,238 @@ import type {
 } from "./types";
 
 export const authApi = {
-  signup: (body: { email: string; password: string; name: string }) =>
-    api.post<SignupResponse>("/v1/auth/signup", body).then((r) => {
-      tokenStore.set(r.access, r.refresh);
-      return r;
-    }),
-  login: (body: { email: string; password: string }) =>
-    api.post<LoginResponse>("/v1/auth/login", body).then((r) => {
-      tokenStore.set(r.access, r.refresh);
-      return r;
-    }),
-  me: () => api.get<AuthUser>("/v1/auth/me"),
-  logout: () => {
+  signup: async (body: { email: string; password: string; name: string }): Promise<SignupResponse> => {
+    const r = await eden.v1.auth.signup.post(body);
+    const data = unwrap(r) as unknown as SignupResponse;
+    tokenStore.set(data.access, data.refresh);
+    return data;
+  },
+  login: async (body: { email: string; password: string }): Promise<LoginResponse> => {
+    const r = await eden.v1.auth.login.post(body);
+    const data = unwrap(r) as unknown as LoginResponse;
+    tokenStore.set(data.access, data.refresh);
+    return data;
+  },
+  me: async (): Promise<AuthUser> => {
+    const r = await eden.v1.auth.me.get();
+    return unwrap(r) as unknown as AuthUser;
+  },
+  logout: async (): Promise<{ ok: true }> => {
     const refresh = tokenStore.refresh;
     tokenStore.clear();
-    return api.post<{ ok: true }>("/v1/auth/logout", refresh ? { refreshToken: refresh } : {});
+    const r = await eden.v1.auth.logout.post(refresh ? { refreshToken: refresh } : {});
+    return unwrap(r) as { ok: true };
   },
 };
 
 export const workspaceApi = {
-  list: () => api.get<{ items: WorkspaceSummary[] }>("/v1/workspaces"),
-  create: (body: { name: string; slug?: string }) =>
-    api.post<{ id: string; slug: string; name: string }>("/v1/workspaces", body),
-  get: (id: string) => api.get<WorkspaceDetail>(`/v1/workspaces/${id}`),
-  members: (id: string, q?: { q?: string; limit?: number }) => {
-    const sp = new URLSearchParams();
-    if (q?.q) sp.set("q", q.q);
-    if (q?.limit !== undefined) sp.set("limit", String(q.limit));
-    const qs = sp.toString();
-    return api.get<{ items: WorkspaceMember[] }>(`/v1/workspaces/${id}/members${qs ? `?${qs}` : ""}`);
+  list: async (): Promise<{ items: WorkspaceSummary[] }> => {
+    const r = await eden.v1.workspaces.get();
+    return unwrap(r) as unknown as { items: WorkspaceSummary[] };
   },
-  invite: (id: string, body: { emails: string[]; role: "admin" | "member" | "guest" }) =>
-    api.post<{ invites: { email: string; token: string }[] }>(`/v1/workspaces/${id}/invites`, body),
-  presence: (id: string) => api.get<Record<string, PresenceStatus>>(`/v1/workspaces/${id}/presence`),
+  create: async (body: { name: string; slug?: string }): Promise<{ id: string; slug: string; name: string }> => {
+    const r = await eden.v1.workspaces.post(body);
+    return unwrap(r) as { id: string; slug: string; name: string };
+  },
+  get: async (id: string): Promise<WorkspaceDetail> => {
+    const r = await eden.v1.workspaces({ id }).get();
+    return unwrap(r) as unknown as WorkspaceDetail;
+  },
+  members: async (id: string, q?: { q?: string; limit?: number }): Promise<{ items: WorkspaceMember[] }> => {
+    const query: Record<string, string | number> = {};
+    if (q?.q !== undefined) query.q = q.q;
+    if (q?.limit !== undefined) query.limit = q.limit;
+    const r = await eden.v1.workspaces({ id }).members.get({ query });
+    return unwrap(r) as unknown as { items: WorkspaceMember[] };
+  },
+  invite: async (
+    id: string,
+    body: { emails: string[]; role: "admin" | "member" | "guest" }
+  ): Promise<{ invites: { email: string; token: string }[] }> => {
+    const r = await eden.v1.workspaces({ id }).invites.post(body);
+    return unwrap(r) as { invites: { email: string; token: string }[] };
+  },
+  presence: async (id: string): Promise<Record<string, PresenceStatus>> => {
+    const r = await eden.v1.workspaces({ id }).presence.get();
+    return unwrap(r) as Record<string, PresenceStatus>;
+  },
 };
 
 export const projectApi = {
-  list: (workspaceId: string) =>
-    api.get<{ items: ProjectSummary[] }>(`/v1/projects?workspaceId=${encodeURIComponent(workspaceId)}`),
-  create: (body: { workspaceId: string; name: string; slug?: string; visibility?: "public" | "workspace" | "restricted" }) =>
-    api.post<{ id: string; slug: string }>("/v1/projects", body),
+  list: async (workspaceId: string): Promise<{ items: ProjectSummary[] }> => {
+    const r = await eden.v1.projects.get({ query: { workspaceId } });
+    return unwrap(r) as unknown as { items: ProjectSummary[] };
+  },
+  create: async (body: {
+    workspaceId: string;
+    name: string;
+    slug?: string;
+    visibility?: "public" | "workspace" | "restricted";
+  }): Promise<{ id: string; slug: string }> => {
+    const r = await eden.v1.projects.post(body);
+    return unwrap(r) as { id: string; slug: string };
+  },
 };
 
 export const chatApi = {
-  list: (workspaceId: string, projectId?: string, opts?: { includeArchived?: boolean }) => {
-    const q = new URLSearchParams({ workspaceId });
-    if (projectId) q.set("projectId", projectId);
-    if (opts?.includeArchived) q.set("includeArchived", "true");
-    return api.get<{ items: ChatSummary[] }>(`/v1/chats?${q.toString()}`);
+  list: async (
+    workspaceId: string,
+    projectId?: string,
+    opts?: { includeArchived?: boolean }
+  ): Promise<{ items: ChatSummary[] }> => {
+    const query: Record<string, string | boolean> = { workspaceId };
+    if (projectId) query.projectId = projectId;
+    if (opts?.includeArchived) query.includeArchived = true;
+    const r = await eden.v1.chats.get({ query: query as never });
+    return unwrap(r) as unknown as { items: ChatSummary[] };
   },
-  create: (body: {
+  create: async (body: {
     workspaceId: string;
     projectId?: string;
     type: "channel" | "dm" | "thread";
     name: string;
     topic?: string;
     members?: string[];
-  }) => api.post<{ id: string }>("/v1/chats", body),
-  get: (id: string) => api.get<ChatDetail>(`/v1/chats/${id}`),
-  update: (id: string, body: { name?: string; topic?: string | null; archivedAt?: null | boolean }) =>
-    api.patch<{ ok: true }>(`/v1/chats/${id}`, body),
-  remove: (id: string) => api.delete<{ ok: true }>(`/v1/chats/${id}`),
-  jump: (id: string, q: { at?: string; messageId?: string }) => {
-    const sp = new URLSearchParams();
-    if (q.at) sp.set("at", q.at);
-    if (q.messageId) sp.set("messageId", q.messageId);
-    return api.get<{ cursor: string | null }>(`/v1/chats/${id}/jump?${sp.toString()}`);
+  }): Promise<{ id: string }> => {
+    const r = await eden.v1.chats.post(body);
+    return unwrap(r) as { id: string };
   },
-  pinned: (id: string) => api.get<{ items: PinnedMessage[] }>(`/v1/chats/${id}/pinned`),
-  media: (
+  get: async (id: string): Promise<ChatDetail> => {
+    const r = await eden.v1.chats({ id }).get();
+    return unwrap(r) as unknown as ChatDetail;
+  },
+  update: async (
+    id: string,
+    body: { name?: string; topic?: string | null; archivedAt?: null | boolean }
+  ): Promise<{ ok: true }> => {
+    const r = await eden.v1.chats({ id }).patch(body);
+    return unwrap(r) as { ok: true };
+  },
+  remove: async (id: string): Promise<{ ok: true }> => {
+    const r = await eden.v1.chats({ id }).delete();
+    return unwrap(r) as { ok: true };
+  },
+  jump: async (id: string, q: { at?: string; messageId?: string }): Promise<{ cursor: string | null }> => {
+    const query: Record<string, string> = {};
+    if (q.at) query.at = q.at;
+    if (q.messageId) query.messageId = q.messageId;
+    const r = await eden.v1.chats({ id }).jump.get({ query });
+    return unwrap(r) as { cursor: string | null };
+  },
+  pinned: async (id: string): Promise<{ items: PinnedMessage[] }> => {
+    const r = await eden.v1.chats({ id }).pinned.get();
+    return unwrap(r) as unknown as { items: PinnedMessage[] };
+  },
+  media: async (
     id: string,
     q: { kind?: string; sender?: string; from?: string; to?: string; limit?: number } = {}
-  ) => {
-    const sp = new URLSearchParams();
-    for (const [k, v] of Object.entries(q)) if (v !== undefined) sp.set(k, String(v));
-    const qs = sp.toString();
-    return api.get<{ items: ChatMediaItem[] }>(`/v1/chats/${id}/media${qs ? `?${qs}` : ""}`);
+  ): Promise<{ items: ChatMediaItem[] }> => {
+    const query: Record<string, string | number> = {};
+    for (const [k, v] of Object.entries(q)) if (v !== undefined) query[k] = v as string | number;
+    const r = await eden.v1.chats({ id }).media.get({ query: query as never });
+    return unwrap(r) as unknown as { items: ChatMediaItem[] };
   },
 };
 
 export const messageApi = {
-  page: (chatId: string, q: { cursor?: string; limit?: number; direction?: "before" | "after" } = {}) => {
-    const sp = new URLSearchParams();
-    for (const [k, v] of Object.entries(q)) if (v !== undefined) sp.set(k, String(v));
-    const qs = sp.toString();
-    return api.get<MessagePage>(`/v1/chats/${chatId}/messages${qs ? `?${qs}` : ""}`);
+  page: async (
+    chatId: string,
+    q: { cursor?: string; limit?: number; direction?: "before" | "after" } = {}
+  ): Promise<MessagePage> => {
+    const query: Record<string, string | number> = {};
+    if (q.cursor !== undefined) query.cursor = q.cursor;
+    if (q.limit !== undefined) query.limit = q.limit;
+    if (q.direction !== undefined) query.direction = q.direction;
+    const r = await eden.v1.chats({ id: chatId }).messages.get({ query: query as never });
+    return unwrap(r) as unknown as MessagePage;
   },
-  send: (chatId: string, body: { body: string; parentId?: string; mentions?: string[]; attachments?: { fileId: string }[] }) =>
-    api.post<MessagePublic>(`/v1/chats/${chatId}/messages`, body),
-  edit: (id: string, body: { body: string }) => api.patch<MessagePublic>(`/v1/messages/${id}`, body),
-  remove: (id: string) => api.delete<{ ok: true }>(`/v1/messages/${id}`),
-  react: (id: string, body: { emoji: string; action: "add" | "remove" }) =>
-    api.post<MessagePublic>(`/v1/messages/${id}/reactions`, body),
-  pin: (id: string) => api.post<MessagePublic>(`/v1/messages/${id}/pin`),
-  unpin: (id: string) => api.delete<MessagePublic>(`/v1/messages/${id}/pin`),
+  send: async (
+    chatId: string,
+    body: { body: string; parentId?: string; mentions?: string[]; attachments?: { fileId: string }[] }
+  ): Promise<MessagePublic> => {
+    const r = await eden.v1.chats({ id: chatId }).messages.post(body);
+    return unwrap(r) as unknown as MessagePublic;
+  },
+  edit: async (id: string, body: { body: string }): Promise<MessagePublic> => {
+    const r = await eden.v1.messages({ id }).patch(body);
+    return unwrap(r) as unknown as MessagePublic;
+  },
+  remove: async (id: string): Promise<{ ok: true }> => {
+    const r = await eden.v1.messages({ id }).delete();
+    return unwrap(r) as { ok: true };
+  },
+  react: async (id: string, body: { emoji: string; action: "add" | "remove" }): Promise<MessagePublic> => {
+    const r = await eden.v1.messages({ id }).reactions.post(body);
+    return unwrap(r) as unknown as MessagePublic;
+  },
+  pin: async (id: string): Promise<MessagePublic> => {
+    const r = await eden.v1.messages({ id }).pin.post();
+    return unwrap(r) as unknown as MessagePublic;
+  },
+  unpin: async (id: string): Promise<MessagePublic> => {
+    const r = await eden.v1.messages({ id }).pin.delete();
+    return unwrap(r) as unknown as MessagePublic;
+  },
 };
 
 export const fileApi = {
-  get: (id: string) => api.get<FileDetail>(`/v1/files/${id}`),
-  thumbnail: (id: string) => api.get<{ url: string }>(`/v1/files/${id}/thumbnail`),
-  remove: (id: string) => api.delete<{ ok: true }>(`/v1/files/${id}`),
-  initUpload: (body: { workspaceId: string; filename: string; mime: string; size: number; checksum: string; chunkSize?: number }) =>
-    api.post<{ uploadId: string; chunkSize: number; totalChunks: number; chunkUrls: { n: number; url: string }[] }>(
-      "/v1/uploads",
-      body
-    ),
-  ackChunk: (uploadId: string, idx: number, body: { etag: string; size: number }) =>
-    api.post<{ ok: true }>(`/v1/uploads/${uploadId}/chunks/${idx}`, body),
-  uploadStatus: (uploadId: string) =>
-    api.get<{ status: string; totalChunks: number; missing: number[] }>(`/v1/uploads/${uploadId}/status`),
-  complete: (uploadId: string) => api.post<{ fileId: string }>(`/v1/uploads/${uploadId}/complete`),
+  get: async (id: string): Promise<FileDetail> => {
+    const r = await eden.v1.files({ id }).get();
+    return unwrap(r) as unknown as FileDetail;
+  },
+  thumbnail: async (id: string): Promise<{ url: string }> => {
+    const r = await eden.v1.files({ id }).thumbnail.get();
+    return unwrap(r) as { url: string };
+  },
+  remove: async (id: string): Promise<{ ok: true }> => {
+    const r = await eden.v1.files({ id }).delete();
+    return unwrap(r) as { ok: true };
+  },
+  initUpload: async (body: {
+    workspaceId: string;
+    filename: string;
+    mime: string;
+    size: number;
+    checksum: string;
+    chunkSize?: number;
+  }): Promise<{ uploadId: string; chunkSize: number; totalChunks: number; chunkUrls: { n: number; url: string }[] }> => {
+    const r = await eden.v1.uploads.post(body);
+    return unwrap(r) as {
+      uploadId: string;
+      chunkSize: number;
+      totalChunks: number;
+      chunkUrls: { n: number; url: string }[];
+    };
+  },
+  ackChunk: async (uploadId: string, idx: number, body: { etag: string; size: number }): Promise<{ ok: true }> => {
+    const r = await eden.v1.uploads({ id: uploadId }).chunks({ idx: String(idx) }).post(body);
+    return unwrap(r) as { ok: true };
+  },
+  uploadStatus: async (
+    uploadId: string
+  ): Promise<{ status: string; totalChunks: number; missing: number[] }> => {
+    const r = await eden.v1.uploads({ id: uploadId }).status.get();
+    return unwrap(r) as { status: string; totalChunks: number; missing: number[] };
+  },
+  complete: async (uploadId: string): Promise<{ fileId: string }> => {
+    const r = await eden.v1.uploads({ id: uploadId }).complete.post();
+    // Backend may return { fileId, already?: true } on idempotent re-complete; the
+    // caller only reads fileId so we keep the original signature.
+    return unwrap(r) as { fileId: string };
+  },
 };
 
 export const searchApi = {
-  query: (q: { q: string; workspaceId: string; type?: "all" | "message" | "file"; limit?: number }) => {
-    const sp = new URLSearchParams();
-    for (const [k, v] of Object.entries(q)) if (v !== undefined) sp.set(k, String(v));
-    return api.get<SearchResult>(`/v1/search?${sp.toString()}`);
+  query: async (q: {
+    q: string;
+    workspaceId: string;
+    type?: "all" | "message" | "file";
+    limit?: number;
+  }): Promise<SearchResult> => {
+    const query: Record<string, string | number> = { q: q.q, workspaceId: q.workspaceId };
+    if (q.type !== undefined) query.type = q.type;
+    if (q.limit !== undefined) query.limit = q.limit;
+    const r = await eden.v1.search.get({ query: query as never });
+    return unwrap(r) as unknown as SearchResult;
   },
 };

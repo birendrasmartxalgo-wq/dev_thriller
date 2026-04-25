@@ -5,16 +5,14 @@
 // query, body and response shapes. Runtime validation happens server-side
 // against the Elysia `t.Object(...)` schemas.
 //
-// Previous-generation behaviors preserved:
+// Behaviors:
 //   - Bearer access token from localStorage (tokenStore)
 //   - Single-flight refresh on 401 via POST /v1/auth/refresh
 //   - ApiError shape so existing error handlers keep working
 //   - X-Request-Id propagation into a small per-request debug context
 //
-// `api` is retained as a thin verb-based shim (get/post/patch/delete/put) so the
-// small number of callers that still use a raw path do not need to change. New
-// code should prefer either `eden` directly or the typed helpers in endpoints.ts
-// / adminApi.ts, which are also Eden-backed.
+// All HTTP traffic flows through `eden`; the typed helpers in endpoints.ts and
+// adminApi.ts are thin wrappers that call `eden.*` and unwrap the result.
 
 import { treaty } from "@elysiajs/eden";
 import type { App } from "@dt/shared";
@@ -169,47 +167,3 @@ export function unwrap<D, E>(resp: { data: D | null; error: E | null }): D {
   if (resp.error) throw toError(resp.error);
   return resp.data as D;
 }
-
-// -----------------------------------------------------------------------------
-// Verb shim — kept for the remaining few callers that still pass raw paths
-// (e.g. SettingsView role change). New code should prefer `eden` or the typed
-// wrappers in endpoints.ts / adminApi.ts.
-// -----------------------------------------------------------------------------
-
-type Method = "GET" | "POST" | "PATCH" | "DELETE" | "PUT";
-
-async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = {};
-  if (body !== undefined) headers["Content-Type"] = "application/json";
-
-  const res = await authedFetch(`${deriveBaseUrl()}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    let payload: { type?: string; title?: string; detail?: string; code?: string; errors?: unknown } = {};
-    try {
-      payload = await res.json();
-    } catch {
-      /* empty */
-    }
-    throw new ApiError(
-      res.status,
-      payload.code ?? String(res.status),
-      payload.detail ?? payload.title ?? res.statusText,
-      payload.errors
-    );
-  }
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
-}
-
-export const api = {
-  get: <T>(path: string) => request<T>("GET", path),
-  post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
-  patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
-  put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),
-  delete: <T>(path: string, body?: unknown) => request<T>("DELETE", path, body),
-};
