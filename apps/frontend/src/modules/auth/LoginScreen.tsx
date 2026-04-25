@@ -67,6 +67,7 @@ export function LoginScreen() {
               onChange={(e) => setEmail(e.target.value)}
               required
               autoComplete="email"
+              data-testid="login-email"
             />
           </div>
           <div className="field">
@@ -80,6 +81,7 @@ export function LoginScreen() {
               required
               autoComplete="current-password"
               minLength={8}
+              data-testid="login-password"
             />
             <div className="hint">
               <Link to="/forgot-password">Forgot password?</Link>
@@ -90,6 +92,7 @@ export function LoginScreen() {
             className="btn btn-primary btn-lg"
             style={{ justifyContent: "center" }}
             disabled={busy}
+            data-testid="login-submit"
           >
             {busy ? <span className="spinner" /> : "Sign in"}
           </button>

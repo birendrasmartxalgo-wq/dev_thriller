@@ -316,7 +316,12 @@ export function Shell({ children }: { children: ReactNode }) {
         {chatsQuery.data?.items
           .filter((c) => c.type === "channel")
           .map((c) => (
-            <Link to={`/c/${c.id}`} key={c.id} className={`sb-item${loc.startsWith(`/c/${c.id}`) ? " active" : ""}`}>
+            <Link
+              to={`/c/${c.id}`}
+              key={c.id}
+              className={`sb-item${loc.startsWith(`/c/${c.id}`) ? " active" : ""}`}
+              data-testid={`chat-link-${c.name}`}
+            >
               <Hash className="icon" size={16} aria-hidden="true" />
               <span>{c.name}</span>
             </Link>

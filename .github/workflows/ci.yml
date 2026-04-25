@@ -110,13 +110,11 @@ jobs:
         run: bun test
 
   e2e:
-    # Marked continue-on-error — the smoke specs drive UI selectors
-    # (data-testid) that the frontend still needs to add, so they will
-    # red until that wiring lands. Once the frontend exposes the testids,
-    # remove `continue-on-error` below.
-    name: e2e (continue-on-error until UI testids land)
+    # The login + send-message smoke runs against a seeded backend. The
+    # invite/signup-via-token spec is `test.skip`-marked until the
+    # `/invite/:token` page ships — see e2e/smoke.spec.ts.
+    name: e2e
     runs-on: ubuntu-latest
-    continue-on-error: true
     services:
       mongo:
         image: mongo:7

@@ -686,7 +686,7 @@ export function ChatView() {
           </div>
         )}
 
-        <div style={{ flex: 1, minHeight: 0 }}>
+        <div style={{ flex: 1, minHeight: 0 }} data-testid="message-list">
           {chatQuery.isLoading && messages.length === 0 && (
             <div style={{ padding: "14px 0" }} aria-hidden="true">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -745,6 +745,7 @@ export function ChatView() {
               ref={composerRef}
               value={draft}
               aria-label="Message draft"
+              data-testid="message-composer"
               onChange={(e) => {
                 setDraft(e.target.value);
                 // Defer to next tick so selectionStart reflects the new value.
