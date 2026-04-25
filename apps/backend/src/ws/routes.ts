@@ -3,12 +3,16 @@ import { ObjectId } from "mongodb";
 import { accessJwt, type AccessClaims } from "@/lib/jwt";
 import { col } from "@/db/mongo";
 import { redis, topics, keys } from "@/db/dragonfly";
-import { cleanupSocket, localSubscribe, localUnsubscribe, publishWorkspace } from "./bus";
+import { cleanupSocket, localSubscribe, localUnsubscribe, publishTyping, publishWorkspace } from "./bus";
 import { logger } from "@/lib/logger";
 import { getMembership } from "@/lib/acl";
 
 // token → userId cache so we don't re-verify every message
-const socketAuth = new WeakMap<object, { userId: ObjectId; workspaceIds: Set<string> }>();
+const socketAuth = new WeakMap<object, { userId: ObjectId; name: string; workspaceIds: Set<string> }>();
+// Per-socket throttle so a held-down key can't flood the publish bus.
+const lastTypingPublish = new WeakMap<object, Map<string, number>>();
+const TYPING_TTL_MS = 4_000;
+const TYPING_THROTTLE_MS = 1_500;
 
 export const wsRoutes = new Elysia({ prefix: "/v1" })
   .use(accessJwt)
@@ -27,7 +31,9 @@ export const wsRoutes = new Elysia({ prefix: "/v1" })
         const userId = new ObjectId(payload.sub);
         const mems = await col.memberships().find({ userId, status: "active" }).toArray();
         const wsIds = new Set(mems.map((m) => m.workspaceId.toHexString()));
-        socketAuth.set(ws.raw as unknown as object, { userId, workspaceIds: wsIds });
+        const userDoc = await col.users().findOne({ _id: userId });
+        const name = userDoc?.name ?? userDoc?.email ?? payload.sub.slice(-6);
+        socketAuth.set(ws.raw as unknown as object, { userId, name, workspaceIds: wsIds });
 
         const send = (data: string) => ws.send(data);
         // Track on the raw socket handle.
@@ -69,6 +75,9 @@ export const wsRoutes = new Elysia({ prefix: "/v1" })
           if (!chat) return;
           if (!auth.workspaceIds.has(chat.workspaceId.toHexString())) return;
           localSubscribe(msg.topic, send);
+          // Auto-subscribe to the ephemeral typing channel for the same chat so
+          // callers don't need a second subscribe round-trip.
+          localSubscribe(`chat:${chatId}:typing`, send);
           ws.send(JSON.stringify({ type: "subscribed", topic: msg.topic }));
         } else if (msg.topic.startsWith("ws:")) {
           const wsid = msg.topic.slice(3);
@@ -78,6 +87,30 @@ export const wsRoutes = new Elysia({ prefix: "/v1" })
         }
       } else if (msg.type === "unsubscribe" && msg.topic) {
         localUnsubscribe(msg.topic, send);
+        if (typeof msg.topic === "string" && msg.topic.startsWith("chat:")) {
+          localUnsubscribe(`${msg.topic}:typing`, send);
+        }
+      } else if (msg.type === "typing" && typeof msg.chat === "string") {
+        if (!ObjectId.isValid(msg.chat)) return;
+        const chat = await col.chats().findOne({ _id: new ObjectId(msg.chat) });
+        if (!chat) return;
+        if (!auth.workspaceIds.has(chat.workspaceId.toHexString())) return;
+        // Throttle per-socket per-chat to one publish every TYPING_THROTTLE_MS.
+        const key = ws.raw as unknown as object;
+        let perChat = lastTypingPublish.get(key);
+        if (!perChat) {
+          perChat = new Map();
+          lastTypingPublish.set(key, perChat);
+        }
+        const now = Date.now();
+        const last = perChat.get(msg.chat) ?? 0;
+        if (now - last < TYPING_THROTTLE_MS) return;
+        perChat.set(msg.chat, now);
+        await publishTyping(msg.chat, {
+          userId: auth.userId.toHexString(),
+          name: auth.name,
+          until: now + TYPING_TTL_MS,
+        });
       } else if (msg.type === "ping") {
         await redis.set(keys.presence(auth.userId.toHexString()), "1", "EX", 60);
         ws.send(JSON.stringify({ type: "pong" }));

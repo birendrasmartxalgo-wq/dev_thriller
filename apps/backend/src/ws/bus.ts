@@ -53,6 +53,7 @@ function fanoutLocal(topic: string, data: string) {
 let subscriber: ReturnType<typeof pubsub.duplicate> | null = null;
 export async function startPubSub(): Promise<void> {
   subscriber = pubsub.duplicate();
+  // Note: `chat:*` matches both `chat:<id>` and `chat:<id>:typing` channels.
   await subscriber.psubscribe("chat:*", "user:*", "ws:*");
   subscriber.on("pmessage", (_pattern, channel, message) => {
     fanoutLocal(channel, message);
@@ -68,4 +69,12 @@ export async function publishUser(userId: string, event: Record<string, unknown>
 }
 export async function publishWorkspace(workspaceId: string, event: Record<string, unknown>): Promise<void> {
   await redis.publish(topics.workspace(workspaceId), JSON.stringify(event));
+}
+/**
+ * Ephemeral typing fan-out. Published to a dedicated `chat:<id>:typing` channel so
+ * subscribers can opt-out without losing the main message feed (the local fan-out
+ * keys subscriptions per topic). No DB writes — clients track expiry via `until`.
+ */
+export async function publishTyping(chatId: string, payload: { userId: string; name: string; until: number }): Promise<void> {
+  await redis.publish(topics.chatTyping(chatId), JSON.stringify({ type: "typing", chatId, ...payload }));
 }

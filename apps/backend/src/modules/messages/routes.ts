@@ -135,6 +135,16 @@ export const messageRoutes = new Elysia({ prefix: "/v1" })
       const direction = query.direction ?? "before";
       const filter: Record<string, unknown> = { chatId };
       if (!query.includeDeleted) filter.deletedAt = { $exists: false };
+      // Thread-aware filter: when `parentId` is provided we return the parent + its
+      // replies (so a thread rail can render its head). When not provided, exclude
+      // thread replies from the main feed — only top-level messages render inline.
+      if (query.parentId !== undefined) {
+        if (!ObjectId.isValid(query.parentId)) throw Errors.badRequest("bad_id", "Invalid parentId");
+        const parentOid = new ObjectId(query.parentId);
+        filter.$or = [{ _id: parentOid }, { parentId: parentOid }];
+      } else {
+        filter.parentId = { $exists: false };
+      }
       if (query.cursor) {
         const c = decodeCursor(query.cursor);
         if (!c) throw Errors.badRequest("bad_cursor", "Invalid cursor");
@@ -165,6 +175,7 @@ export const messageRoutes = new Elysia({ prefix: "/v1" })
         limit: t.Optional(t.Numeric()),
         direction: t.Optional(t.Union([t.Literal("before"), t.Literal("after")])),
         includeDeleted: t.Optional(t.Boolean()),
+        parentId: t.Optional(t.String()),
       }),
     }
   )
@@ -230,6 +241,19 @@ export const messageRoutes = new Elysia({ prefix: "/v1" })
 
       const payload = publicMessage(doc);
       await publishChat(chatId.toHexString(), { type: "message.created", message: payload });
+      // For thread replies, also fan out a thread.update so any client showing
+      // the parent's reply chip can update without re-fetching the message.
+      if (doc.parentId) {
+        const parentIdHex = doc.parentId.toHexString();
+        const replyCount = await col.messages().countDocuments({ parentId: doc.parentId, deletedAt: { $exists: false } });
+        await publishChat(chatId.toHexString(), {
+          type: "thread.update",
+          parentId: parentIdHex,
+          replyCount,
+          lastReplyAt: doc.createdAt,
+          lastReplyAuthor: auth.userId.toHexString(),
+        });
+      }
 
       // Fan-out notifications for mentions + DM participants (exclude the author).
       const recipients = new Map<string, "mention" | "dm" | "reply">();

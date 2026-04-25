@@ -32,6 +32,7 @@ export const keys = {
 
 export const topics = {
   chat: (chatId: string) => `chat:${chatId}`,
+  chatTyping: (chatId: string) => `chat:${chatId}:typing`,
   user: (userId: string) => `user:${userId}`,
   workspace: (workspaceId: string) => `ws:${workspaceId}`,
   aclInvalidate: () => `acl:invalidate`,

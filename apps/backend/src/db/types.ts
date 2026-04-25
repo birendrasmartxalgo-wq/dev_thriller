@@ -230,6 +230,7 @@ export interface UserChatStateDoc {
   chatId: ObjectId;
   workspaceId: ObjectId;
   lastReadAt: Date;
+  lastReadMessageId?: ObjectId;
   mentionCount: number;
 }
 

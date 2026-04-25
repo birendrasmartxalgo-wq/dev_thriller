@@ -187,17 +187,28 @@ export const chatApi = {
     const r = await eden.v1.chats({ id }).media.get({ query: query as never });
     return unwrap(r) as { items: ChatMediaItem[] };
   },
+  markRead: async (id: string, body: { messageId: string }): Promise<{ ok: true }> => {
+    const r = await eden.v1.chats({ id }).read.post(body);
+    return unwrap(r) as { ok: true };
+  },
+  readState: async (
+    id: string
+  ): Promise<{ items: Record<string, { lastReadMessageId: string | null; lastReadAt: string }> }> => {
+    const r = await eden.v1.chats({ id })["read-state"].get();
+    return unwrap(r) as { items: Record<string, { lastReadMessageId: string | null; lastReadAt: string }> };
+  },
 };
 
 export const messageApi = {
   page: async (
     chatId: string,
-    q: { cursor?: string; limit?: number; direction?: "before" | "after" } = {}
+    q: { cursor?: string; limit?: number; direction?: "before" | "after"; parentId?: string } = {}
   ): Promise<MessagePage> => {
     const query: Record<string, string | number> = {};
     if (q.cursor !== undefined) query.cursor = q.cursor;
     if (q.limit !== undefined) query.limit = q.limit;
     if (q.direction !== undefined) query.direction = q.direction;
+    if (q.parentId !== undefined) query.parentId = q.parentId;
     const r = await eden.v1.chats({ id: chatId }).messages.get({ query: query as never });
     return unwrap(r) as MessagePage;
   },

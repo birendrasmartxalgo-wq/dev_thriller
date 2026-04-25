@@ -250,6 +250,69 @@ export const chatRoutes = new Elysia({ prefix: "/v1/chats" })
       params: t.Object({ id: t.String() }),
       query: t.Object({ at: t.Optional(t.String()), messageId: t.Optional(t.String()) }),
     }
+  )
+
+  .post(
+    "/:id/read",
+    async ({ auth, params, body }) => {
+      requireAuth(auth);
+      const chatId = oid(params.id);
+      const chat = await col.chats().findOne({ _id: chatId });
+      if (!chat) throw Errors.notFound("Chat");
+      const mem = await getMembership(chat.workspaceId, auth.userId);
+      if (!mem) throw Errors.forbidden();
+      const messageId = oid(body.messageId);
+      const m = await col.messages().findOne({ _id: messageId, chatId });
+      if (!m) throw Errors.notFound("Message");
+      await col.userChatState().updateOne(
+        { userId: auth.userId, chatId },
+        {
+          $set: {
+            workspaceId: chat.workspaceId,
+            lastReadAt: m.createdAt,
+            lastReadMessageId: messageId,
+          },
+          $setOnInsert: { mentionCount: 0 },
+        },
+        { upsert: true }
+      );
+      // Fan out a lightweight event so peers can update their "Seen by" footers
+      // without polling. No DB writes per peer.
+      await publishChat(chatId.toHexString(), {
+        type: "read.update",
+        chatId: chatId.toHexString(),
+        userId: auth.userId.toHexString(),
+        lastReadMessageId: messageId.toHexString(),
+        lastReadAt: m.createdAt,
+      });
+      return { ok: true };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({ messageId: t.String() }),
+    }
+  )
+
+  .get(
+    "/:id/read-state",
+    async ({ auth, params }) => {
+      requireAuth(auth);
+      const chatId = oid(params.id);
+      const chat = await col.chats().findOne({ _id: chatId });
+      if (!chat) throw Errors.notFound("Chat");
+      const mem = await getMembership(chat.workspaceId, auth.userId);
+      if (!mem) throw Errors.forbidden();
+      const rows = await col.userChatState().find({ chatId }).toArray();
+      const items: Record<string, { lastReadMessageId: string | null; lastReadAt: string }> = {};
+      for (const r of rows) {
+        items[r.userId.toHexString()] = {
+          lastReadMessageId: r.lastReadMessageId?.toHexString() ?? null,
+          lastReadAt: r.lastReadAt.toISOString(),
+        };
+      }
+      return { items };
+    },
+    { params: t.Object({ id: t.String() }) }
   );
 
 export function encodeCursor(createdAt: Date, id: ObjectId): string {
