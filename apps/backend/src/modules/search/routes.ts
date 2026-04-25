@@ -185,6 +185,30 @@ export const searchRoutes = new Elysia({ prefix: "/v1/search" })
     }
   )
 
+  .get(
+    "/saved",
+    async ({ auth, query }) => {
+      requireAuth(auth);
+      const wsId = oid(query.workspaceId);
+      const mem = await getMembership(wsId, auth.userId);
+      if (!mem) throw Errors.forbidden();
+      const items = await col
+        .savedSearches()
+        .find({ userId: auth.userId, workspaceId: wsId })
+        .sort({ createdAt: 1 })
+        .toArray();
+      return {
+        items: items.map((s) => ({
+          id: s._id.toHexString(),
+          name: s.name,
+          query: s.query,
+          createdAt: s.createdAt.toISOString(),
+        })),
+      };
+    },
+    { query: t.Object({ workspaceId: t.String() }) }
+  )
+
   .post(
     "/saved",
     async ({ auth, body }) => {
@@ -212,25 +236,6 @@ export const searchRoutes = new Elysia({ prefix: "/v1/search" })
     }
   )
 
-  .get(
-    "/saved",
-    async ({ auth, query }) => {
-      requireAuth(auth);
-      const wsId = oid(query.workspaceId);
-      const mem = await getMembership(wsId, auth.userId);
-      if (!mem) throw Errors.forbidden();
-      const items = await col
-        .savedSearches()
-        .find({ userId: auth.userId, workspaceId: wsId })
-        .sort({ createdAt: -1 })
-        .toArray();
-      return {
-        items: items.map((s) => ({ id: s._id.toHexString(), name: s.name, query: s.query, createdAt: s.createdAt })),
-      };
-    },
-    { query: t.Object({ workspaceId: t.String() }) }
-  )
-
   .delete(
     "/saved/:id",
     async ({ auth, params }) => {
@@ -238,7 +243,7 @@ export const searchRoutes = new Elysia({ prefix: "/v1/search" })
       const id = oid(params.id);
       const r = await col.savedSearches().deleteOne({ _id: id, userId: auth.userId });
       if (r.deletedCount === 0) throw Errors.notFound("Saved search");
-      return { ok: true };
+      return { ok: true as const };
     },
     { params: t.Object({ id: t.String() }) }
   );
